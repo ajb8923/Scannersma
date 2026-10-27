@@ -511,12 +511,18 @@ function drawChart(r){
 async function tgSend(text){
   const tok = cfg.tg.token.trim(), chat = cfg.tg.chat.trim();
   if (!tok || !chat) throw new Error("Falta el token o el chat ID en Ajustes.");
-  const r = await fetch("https://api.telegram.org/bot" + tok + "/sendMessage", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({chat_id: chat, text})
-  });
+  if (!/^\d+:[\w-]{30,}$/.test(tok)) throw new Error("El token no tiene el formato correcto (número, dos puntos y clave).");
+  const url = "https://api.telegram.org/bot" + tok + "/sendMessage";
+  const body = new URLSearchParams({chat_id: chat, text});
+  let r;
+  try { r = await fetch(url, {method:"POST", body}); }
+  catch(e) {
+    await fetch(url, {method:"POST", body, mode:"no-cors"});
+    return "sin confirmación";
+  }
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.ok) throw new Error(j.description || ("HTTP " + r.status));
+  return "ok";
 }
 function signalText(onlyConfirmed){
   const list = results.filter(r => !r.err && r.sigToday && (!onlyConfirmed || !r.prov));
@@ -554,7 +560,7 @@ $("saveCfg").onclick = () => {
 };
 $("tgTest").onclick = async () => {
   readCfgForm(); save("t1cfg", cfg);
-  try { await tgSend("✅ Técnica 1 conectada. Aquí recibirás las señales."); $("status").textContent = "Mensaje de prueba enviado a Telegram."; }
+  try { const k = await tgSend("✅ Técnica 1 conectada. Aquí recibirás las señales."); $("status").textContent = k === "ok" ? "Mensaje de prueba enviado a Telegram." : "Mensaje enviado, pero el navegador no deja confirmar la respuesta. Mira si te ha llegado a Telegram."; }
   catch(e) { $("status").textContent = "Telegram: " + e.message; }
 };
 $("tgSend").onclick = async () => {
