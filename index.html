@@ -151,7 +151,8 @@ if (!cfg.tg) cfg.tg = {token:"", chat:"", auto:false};
 let cache = load("t1cache") || {at:0, d:{}};
 let ui = {estado:"all", sector:"all", text:"", sel:null};
 let results = [];
-let goodProxy = 0;
+let active = [0, 1, 2];
+const PNAMES = ["corsproxy.io", "allorigins", "codetabs"];
 
 function universe(){
   const out = [], seen = new Set();
@@ -189,15 +190,13 @@ async function fetchT(url, ms, asText){
 function r4(v){ return v == null ? null : +(+v).toFixed(4); }
 async function getYahoo(sym){
   let last = new Error("Sin respuesta");
-  for (let k = 0; k < PROXIES.length; k++) {
-    const i = (goodProxy + k) % PROXIES.length;
+  for (const i of active) {
     for (const host of ["query1", "query2"]) {
       const y = "https://" + host + ".finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(sym) + "?range=2y&interval=1d";
       try {
-        const j = await fetchT(PROXIES[i](y), 15000);
+        const j = await fetchT(PROXIES[i](y), 9000);
         const r = j && j.chart && j.chart.result && j.chart.result[0];
         if (!r) throw new Error((j && j.chart && j.chart.error && j.chart.error.description) || "Ticker sin datos");
-        goodProxy = i;
         const ts = r.timestamp || [], q = (r.indicators && r.indicators.quote && r.indicators.quote[0]) || {};
         const t = [], o = [], h = [], l = [], c = [];
         for (let n = 0; n < ts.length; n++) {
@@ -226,9 +225,9 @@ async function getStooq(sym){
   if (!s) throw new Error("Sin fuente alternativa");
   const url = "https://stooq.com/q/d/l/?s=" + encodeURIComponent(s) + "&i=d";
   let last = new Error("Sin respuesta");
-  for (let k = 0; k < PROXIES.length; k++) {
+  for (const i of active) {
     try {
-      const txt = await fetchT(PROXIES[(goodProxy + k) % PROXIES.length](url), 15000, true);
+      const txt = await fetchT(PROXIES[i](url), 9000, true);
       if (!/^Date,Open,High,Low,Close/i.test(txt.trim())) throw new Error("Stooq sin datos");
       const rows = txt.trim().split(/\r?\n/).slice(1).slice(-520);
       const t = [], o = [], h = [], l = [], c = [];
@@ -246,6 +245,18 @@ async function getStooq(sym){
   }
   throw last;
 }
+async function checkProxies(){
+  const url = "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?range=5d&interval=1d";
+  const res = await Promise.all(PROXIES.map(async (f, i) => {
+    const t0 = performance.now();
+    try {
+      const j = await fetchT(f(url), 9000);
+      if (j && j.chart && j.chart.result) return {i, ok:true, ms: performance.now() - t0};
+      return {i, ok:false, e:"respuesta no válida"};
+    } catch(e) { return {i, ok:false, e: e.name === "AbortError" ? "sin respuesta" : String(e.message || e)}; }
+  }));
+  return {res, ok: res.filter(r => r.ok).sort((a, b) => a.ms - b.ms)};
+}
 async function getChart(sym){
   try { return await getYahoo(sym); }
   catch(e) {
@@ -259,7 +270,17 @@ async function refresh(onlyErrors){
   const U = onlyErrors ? all.filter(u => { const x = cache.d[u.sym]; return !x || x.err || x.stale; }) : all;
   if (!U.length) return;
   $("refresh").disabled = true; $("retry").disabled = true;
+  $("status").textContent = "Comprobando la conexión con los servidores de datos…";
+  $("prog").style.width = "3%";
+  const chk = await checkProxies();
+  if (!chk.ok.length) {
+    $("refresh").disabled = false; $("retry").disabled = false; $("prog").style.width = "0";
+    $("status").textContent = "No responde ningún servidor de datos. " + chk.res.map(r => PNAMES[r.i] + ": " + r.e).join(", ") + ". Vuelve a intentarlo en unos minutos.";
+    return;
+  }
+  active = chk.ok.map(r => r.i);
   let done = 0, errs = 0;
+  $("status").textContent = "Descargando 0 de " + U.length + " (vía " + active.map(i => PNAMES[i]).join(", ") + ")…";
   const d = Object.assign({}, cache.d), q = U.slice();
   async function worker(){
     while (q.length) {
@@ -273,7 +294,7 @@ async function refresh(onlyErrors){
       }
       done++;
       $("prog").style.width = (done/U.length*100) + "%";
-      $("status").textContent = "Descargando " + done + " de " + U.length + "…";
+      $("status").textContent = "Descargando " + done + " de " + U.length + (errs ? ", " + errs + " con error" : "") + "…";
       await sleep(350);
     }
   }
