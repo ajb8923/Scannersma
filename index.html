@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Técnica 1 · Escáner SMA 6/70/200</title>
+<style>
+:root{--bg:#060d1a;--panel:#0b1628;--line:#18273f;--text:#dce6f3;--muted:#7d8ea8;--long:#3fd492;--short:#ff6b7a;--warn:#f2b84b;--s6:#ffffff;--s70:#ff4d4d;--s200:#3d8bff;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%}
+body{padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(24px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:1200px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:10px}
+h1{margin:0;font-size:26px;font-weight:650;letter-spacing:-.01em}
+.trio{display:flex;gap:4px;margin-top:6px}.trio span{height:3px;width:34px;border-radius:2px}
+.sub{color:var(--muted);font-size:13px;margin-top:6px}
+button,select,input,textarea{font:inherit;color:var(--text)}
+.btn{background:#163563;border:1px solid #2c5596;border-radius:10px;padding:9px 16px;cursor:pointer}
+.btn:disabled{opacity:.5}
+.btn.ghost{background:transparent;border-color:var(--line)}
+.status{font-size:13px;color:var(--muted);margin-top:6px;max-width:520px}
+.bar{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin:8px 0 14px}
+.bar i{display:block;height:100%;width:0;background:var(--s200);transition:width .2s}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:120px;cursor:pointer;text-align:left}
+.stat b{display:block;font-size:24px;font-weight:650;font-variant-numeric:tabular-nums}
+.stat small{color:var(--muted);font-size:13px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{background:transparent;border:0;padding:8px 12px;color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--panel);color:var(--text)}
+select,input[type=search],input[type=number],input[type=text],input[type=password]{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;width:100%}
+.controls select,.controls input{width:auto}
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:820px;font-variant-numeric:tabular-nums}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:500;color:var(--muted);font-size:13px;background:#08121f}
+tr.row{cursor:pointer}tr.row:hover td{background:#0a1526}
+tr.sel td{background:#0d1d36}
+tr.drow>td{padding:0;white-space:normal;background:#081324}
+.detail{position:sticky;left:0;width:calc(100vw - 34px);max-width:1168px;padding:14px}
+.detail h2{margin:0 0 2px;font-size:19px}
+.tk{font-weight:600}.sec{color:var(--muted);font-size:12px;display:block}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:13px;font-weight:600}
+.L{color:var(--long);background:rgba(63,212,146,.12)}.S{color:var(--short);background:rgba(255,107,122,.12)}
+.sig{color:var(--warn);font-weight:600}
+.pos{color:var(--long)}.neg{color:var(--short)}.mut{color:var(--muted)}
+.prov{font-size:11px;color:var(--warn);margin-left:6px;font-weight:500}
+.empty{padding:26px;text-align:center;color:var(--muted)}
+canvas{width:100%;height:320px;display:block;margin:10px 0 6px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap;margin-bottom:12px}
+.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}
+.trades{min-width:0}
+details{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+summary{cursor:pointer;font-weight:600}
+h3{font-size:15px;margin:18px 0 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}
+label{font-size:13px;color:var(--muted);display:block;margin-bottom:4px}
+.chk{display:flex;align-items:center;gap:8px;color:var(--text);font-size:14px;margin-top:12px}
+textarea{width:100%;min-height:96px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:13px}
+.row-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+:focus-visible{outline:2px solid var(--s200);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Técnica 1</h1>
+    <div class="trio" aria-hidden="true"><span style="background:var(--s6)"></span><span style="background:var(--s70)"></span><span style="background:var(--s200)"></span></div>
+    <div class="sub">Cruce de SMA 6 sobre SMA 70 con filtro de tendencia SMA 200, velas diarias</div>
+  </div>
+  <div style="text-align:right">
+    <div class="row-btns" style="justify-content:flex-end;margin:0">
+      <button class="btn ghost" id="retry" style="display:none">Reintentar errores</button>
+      <button class="btn" id="refresh">Actualizar datos</button>
+    </div>
+    <div class="status" id="status">Sin datos todavía. Pulsa Actualizar datos.</div>
+  </div>
+</header>
+<div class="bar"><i id="prog"></i></div>
+<div class="stats" id="stats"></div>
+<div class="controls">
+  <div class="seg" id="segEstado">
+    <button data-v="all" class="on">Todos</button>
+    <button data-v="sig">Señal hoy</button>
+    <button data-v="rec">Últimos 5 días</button>
+    <button data-v="L">En largo</button>
+    <button data-v="S">En corto</button>
+  </div>
+  <select id="fSector" aria-label="Sector"></select>
+  <input type="search" id="fText" placeholder="Buscar ticker" aria-label="Buscar ticker">
+</div>
+<div class="tablebox">
+  <table>
+    <thead><tr><th>Ticker</th><th>Cierre</th><th>Día</th><th>Estado</th><th>Señal</th><th>Entrada</th><th>Resultado</th><th>Filtro hoy</th></tr></thead>
+    <tbody id="tb"></tbody>
+  </table>
+</div>
+<details id="cfg">
+  <summary>Ajustes</summary>
+  <div class="grid">
+    <div><label for="lb200">Pendiente SMA 200: sesiones atrás</label><input type="number" id="lb200" min="1" max="100"></div>
+    <div><label for="lb70">Pendiente SMA 70: sesiones atrás</label><input type="number" id="lb70" min="1" max="100"></div>
+  </div>
+  <div class="grid" id="lists"></div>
+  <h3>Telegram</h3>
+  <div class="grid">
+    <div><label for="tgToken">Token del bot</label><input type="password" id="tgToken" placeholder="123456:ABC…" autocomplete="off"></div>
+    <div><label for="tgChat">Chat ID</label><input type="text" id="tgChat" placeholder="123456789" autocomplete="off"></div>
+  </div>
+  <label class="chk"><input type="checkbox" id="tgAuto"> Enviar las señales confirmadas automáticamente al actualizar</label>
+  <div class="row-btns">
+    <button class="btn" id="saveCfg">Guardar ajustes</button>
+    <button class="btn ghost" id="tgTest">Probar Telegram</button>
+    <button class="btn ghost" id="tgSend">Enviar señales ahora</button>
+    <button class="btn ghost" id="resetCfg">Restaurar listas por defecto</button>
+    <button class="btn ghost" id="clearCache">Borrar datos guardados</button>
+  </div>
+  <div class="note">Tickers con formato de Yahoo Finance, separados por comas (índices: ^NDX, ^GSPC, ^DJI, ^IBEX). Si añades tickers, pulsa Actualizar datos para descargarlos. El token de Telegram solo se guarda en este dispositivo.</div>
+</details>
+</div>
+<script>
+const DEF = {
+  lb200: 20, lb70: 10,
+  lists: {
+    "Índices y ETF": "^NDX,^GSPC,^DJI,^IBEX,XLK,XLE,XLV",
+    "Energía": "XOM,CVX,COP,EOG,SLB,PSX,MPC,VLO,OXY,WMB,KMI,OKE,FANG,BKR,HAL,DVN,CTRA,TRGP,EQT,APA,TPL,EXE",
+    "Tecnología": "AAPL,MSFT,NVDA,AVGO,ORCL,PLTR,AMD,CRM,CSCO,IBM,ADBE,ACN,INTU,QCOM,TXN,NOW,AMAT,MU,LRCX,PANW,KLAC,ADI,APP,CRWD,ANET,SNPS,CDNS,INTC,MRVL,FTNT,NXPI,MCHP,ADSK,WDAY,DELL,ROP",
+    "Salud": "LLY,JNJ,ABBV,UNH,MRK,ABT,TMO,ISRG,AMGN,BSX,DHR,PFE,GILD,SYK,VRTX,MDT,BMY,CVS,ELV,CI,MCK,HCA,REGN,ZTS,BDX,COR,EW,IDXX,A,GEHC,RMD,IQV,DXCM,HUM,CNC,MRNA,BIIB,ALGN,STE,WST"
+  },
+  tg: {token:"", chat:"", auto:false}
+};
+const NAMES = {"^NDX":"Nasdaq 100","^GSPC":"S&P 500","^DJI":"Dow Jones","^IBEX":"IBEX 35"};
+const STOOQ_IDX = {"^NDX":"^ndx","^GSPC":"^spx","^DJI":"^dji"};
+const PROXIES = [
+  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u)
+];
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function load(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }
+function save(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } }
+function esc(s){ return String(s).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch])); }
+
+let cfg = load("t1cfg") || JSON.parse(JSON.stringify(DEF));
+if (!cfg.tg) cfg.tg = {token:"", chat:"", auto:false};
+let cache = load("t1cache") || {at:0, d:{}};
+let ui = {estado:"all", sector:"all", text:"", sel:null};
+let results = [];
+let goodProxy = 0;
+
+function universe(){
+  const out = [], seen = new Set();
+  for (const [sec, txt] of Object.entries(cfg.lists)) {
+    for (let s of String(txt).split(/[\s,;]+/)) {
+      s = s.trim().toUpperCase();
+      if (!s || seen.has(s)) continue;
+      seen.add(s); out.push({sym:s, sec});
+    }
+  }
+  return out;
+}
+const nameOf = s => NAMES[s] || s;
+const fmtD = ts => new Date(ts*1000).toLocaleDateString("es-ES",{day:"2-digit",month:"2-digit",year:"2-digit"});
+const fmtP = v => v == null ? "—" : (v >= 1000 ? v.toLocaleString("es-ES",{maximumFractionDigits:0}) : v.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2}));
+const fmtPct = v => v == null ? "—" : (v >= 0 ? "+" : "") + (v*100).toFixed(2).replace(".", ",") + "%";
+const cls = v => v == null ? "mut" : v >= 0 ? "pos" : "neg";
+function niceErr(m){
+  m = String(m || "");
+  if (/401/.test(m)) return "Yahoo rechazó la petición (401). Pulsa Reintentar errores.";
+  if (/429/.test(m)) return "Demasiadas peticiones (429). Espera un poco y reintenta.";
+  if (/abort|tiempo/i.test(m)) return "Tiempo de espera agotado";
+  return m;
+}
+
+async function fetchT(url, ms, asText){
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  try {
+    const r = await fetch(url, {signal:ac.signal});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return asText ? await r.text() : await r.json();
+  } finally { clearTimeout(t); }
+}
+function r4(v){ return v == null ? null : +(+v).toFixed(4); }
+async function getYahoo(sym){
+  let last = new Error("Sin respuesta");
+  for (let k = 0; k < PROXIES.length; k++) {
+    const i = (goodProxy + k) % PROXIES.length;
+    for (const host of ["query1", "query2"]) {
+      const y = "https://" + host + ".finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(sym) + "?range=2y&interval=1d";
+      try {
+        const j = await fetchT(PROXIES[i](y), 15000);
+        const r = j && j.chart && j.chart.result && j.chart.result[0];
+        if (!r) throw new Error((j && j.chart && j.chart.error && j.chart.error.description) || "Ticker sin datos");
+        goodProxy = i;
+        const ts = r.timestamp || [], q = (r.indicators && r.indicators.quote && r.indicators.quote[0]) || {};
+        const t = [], o = [], h = [], l = [], c = [];
+        for (let n = 0; n < ts.length; n++) {
+          if (q.close == null || q.close[n] == null) continue;
+          const cc = r4(q.close[n]);
+          t.push(ts[n]); c.push(cc);
+          o.push(r4(q.open && q.open[n] != null ? q.open[n] : cc));
+          h.push(r4(q.high && q.high[n] != null ? q.high[n] : cc));
+          l.push(r4(q.low && q.low[n] != null ? q.low[n] : cc));
+        }
+        const p = r.meta && r.meta.currentTradingPeriod && r.meta.currentTradingPeriod.regular;
+        const now = Date.now()/1000;
+        return {t, o, h, l, c, prov: !!(p && now >= p.start && now < p.end)};
+      } catch(e) {
+        last = e;
+        if (/no data|delisted|not found|sin datos/i.test(e.message)) throw e;
+      }
+    }
+  }
+  throw last;
+}
+async function getStooq(sym){
+  let s = null;
+  if (sym.startsWith("^")) s = STOOQ_IDX[sym] || null;
+  else if (/^[A-Z.\-]+$/.test(sym)) s = sym.toLowerCase().replace(".", "-") + ".us";
+  if (!s) throw new Error("Sin fuente alternativa");
+  const url = "https://stooq.com/q/d/l/?s=" + encodeURIComponent(s) + "&i=d";
+  let last = new Error("Sin respuesta");
+  for (let k = 0; k < PROXIES.length; k++) {
+    try {
+      const txt = await fetchT(PROXIES[(goodProxy + k) % PROXIES.length](url), 15000, true);
+      if (!/^Date,Open,High,Low,Close/i.test(txt.trim())) throw new Error("Stooq sin datos");
+      const rows = txt.trim().split(/\r?\n/).slice(1).slice(-520);
+      const t = [], o = [], h = [], l = [], c = [];
+      for (const row of rows) {
+        const f = row.split(",");
+        const d = f[0].split("-");
+        const cc = parseFloat(f[4]);
+        if (d.length !== 3 || !isFinite(cc)) continue;
+        t.push(Date.UTC(+d[0], +d[1]-1, +d[2], 16)/1000);
+        o.push(r4(parseFloat(f[1]) || cc)); h.push(r4(parseFloat(f[2]) || cc)); l.push(r4(parseFloat(f[3]) || cc)); c.push(r4(cc));
+      }
+      if (c.length < 2) throw new Error("Stooq sin datos");
+      return {t, o, h, l, c, prov:false, src:"stooq"};
+    } catch(e) { last = e; }
+  }
+  throw last;
+}
+async function getChart(sym){
+  try { return await getYahoo(sym); }
+  catch(e) {
+    try { return await getStooq(sym); }
+    catch(e2) { throw e; }
+  }
+}
+
+async function refresh(onlyErrors){
+  const all = universe();
+  const U = onlyErrors ? all.filter(u => { const x = cache.d[u.sym]; return !x || x.err || x.stale; }) : all;
+  if (!U.length) return;
+  $("refresh").disabled = true; $("retry").disabled = true;
+  let done = 0, errs = 0;
+  const d = Object.assign({}, cache.d), q = U.slice();
+  async function worker(){
+    while (q.length) {
+      const u = q.shift();
+      try { d[u.sym] = await getChart(u.sym); }
+      catch(e) {
+        const msg = e.name === "AbortError" ? "Tiempo de espera agotado" : String(e.message || e);
+        if (d[u.sym] && d[u.sym].c) { d[u.sym] = Object.assign({}, d[u.sym], {stale:true, lastErr:msg}); }
+        else d[u.sym] = {err:msg};
+        errs++;
+      }
+      done++;
+      $("prog").style.width = (done/U.length*100) + "%";
+      $("status").textContent = "Descargando " + done + " de " + U.length + "…";
+      await sleep(350);
+    }
+  }
+  await Promise.all(Array.from({length:3}, worker));
+  $("refresh").disabled = false; $("retry").disabled = false;
+  if (errs === U.length && !onlyErrors && !cache.at) {
+    $("status").textContent = "No se pudo descargar ningún ticker. Comprueba la conexión o vuelve a intentarlo en unos minutos.";
+    return;
+  }
+  cache = {at: Date.now(), d};
+  const ok = save("t1cache", cache);
+  compute();
+  setStatus(ok);
+  setTimeout(() => { $("prog").style.width = "0"; }, 800);
+  if (cfg.tg.auto && cfg.tg.token && cfg.tg.chat) autoSend();
+}
+function countErrs(){ return universe().filter(u => { const x = cache.d[u.sym]; return x && (x.err || x.stale); }).length; }
+function setStatus(saved){
+  const n = countErrs();
+  $("retry").style.display = n ? "" : "none";
+  $("retry").textContent = "Reintentar errores (" + n + ")";
+  if (!cache.at) return;
+  const when = new Date(cache.at).toLocaleString("es-ES",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+  let s = "Datos del " + when;
+  if (n) s += ". " + n + " tickers sin actualizar";
+  if (saved === false) s += ". No se pudieron guardar en el dispositivo";
+  $("status").textContent = s;
+}
+
+function sma(a, p){
+  const o = new Array(a.length).fill(null); let s = 0;
+  for (let i = 0; i < a.length; i++) {
+    s += a[i];
+    if (i >= p) s -= a[i-p];
+    if (i >= p-1) o[i] = s/p;
+  }
+  return o;
+}
+function analyze(t, c){
+  const n = c.length, lb2 = cfg.lb200, lb7 = cfg.lb70;
+  const s6 = sma(c,6), s70 = sma(c,70), s200 = sma(c,200);
+  const sig = new Array(n).fill(""), trades = [];
+  const fLa = new Array(n).fill(false), fSa = new Array(n).fill(false);
+  let pos = 0;
+  for (let i = 1; i < n; i++) {
+    if (s70[i] == null || s70[i-1] == null) continue;
+    const ok = s200[i] != null && i-lb2 >= 0 && s200[i-lb2] != null && i-lb7 >= 0 && s70[i-lb7] != null;
+    const fL = ok && s200[i] > s200[i-lb2] && s70[i] > s70[i-lb7] && s70[i] > s200[i];
+    const fS = ok && s200[i] < s200[i-lb2] && s70[i] < s70[i-lb7] && s70[i] < s200[i];
+    fLa[i] = fL; fSa[i] = fS;
+    const up = s6[i-1] <= s70[i-1] && s6[i] > s70[i];
+    const dn = s6[i-1] >= s70[i-1] && s6[i] < s70[i];
+    const txt = [];
+    if (pos === 1 && dn) { pos = 0; trades[trades.length-1].out = i; txt.push("Cierra largo"); }
+    if (pos === -1 && up) { pos = 0; trades[trades.length-1].out = i; txt.push("Cierra corto"); }
+    if (pos === 0 && up && fL) { pos = 1; trades.push({dir:1, in:i}); txt.push("Entra LARGO"); }
+    if (pos === 0 && dn && fS) { pos = -1; trades.push({dir:-1, in:i}); txt.push("Entra CORTO"); }
+    sig[i] = txt.join(" + ");
+  }
+  const L = n-1;
+  let recAgo = null;
+  for (let k = 0; k < 5 && L-k >= 0; k++) if (sig[L-k]) { recAgo = k; break; }
+  const open = pos !== 0 ? trades[trades.length-1] : null;
+  return {
+    t, c, s6, s70, s200, sig, trades, pos, n,
+    enough: n >= 200 + lb2,
+    sigToday: sig[L] || "", recAgo, recSig: recAgo != null ? sig[L-recAgo] : "",
+    fL: fLa[L], fS: fSa[L],
+    close: c[L], dayChg: n > 1 ? c[L]/c[L-1]-1 : null, date: t[L],
+    entry: open ? {ts: t[open.in], p: c[open.in]} : null,
+    ret: open ? open.dir*(c[L]/c[open.in]-1) : null
+  };
+}
+function compute(){
+  results = universe().map(u => {
+    const x = cache.d[u.sym];
+    if (!x) return Object.assign({}, u, {err:"Sin descargar"});
+    if (x.err) return Object.assign({}, u, {err:niceErr(x.err)});
+    if (!x.c || x.c.length < 2) return Object.assign({}, u, {err:"Ticker sin datos"});
+    const a = analyze(x.t, x.c);
+    return Object.assign({}, u, a, {prov:x.prov, stale:!!x.stale, o:x.o, h:x.h, l:x.l});
+  });
+  render();
+}
+
+function rank(r){
+  if (r.err) return 9;
+  if (r.sigToday) return 0;
+  if (r.recAgo != null) return 1;
+  if (r.pos !== 0) return 2;
+  return 3;
+}
+function rowHTML(r){
+  const name = '<span class="tk">' + esc(nameOf(r.sym)) + '</span><span class="sec">' + esc(r.sym !== nameOf(r.sym) ? r.sym + " · " + r.sec : r.sec) + '</span>';
+  const sel = ui.sel === r.sym ? " sel" : "";
+  if (r.err) return '<tr class="row' + sel + '" data-s="' + esc(r.sym) + '"><td>' + name + '</td><td colspan="7" class="neg" style="white-space:normal">' + esc(r.err) + '</td></tr>';
+  const est = r.pos === 1 ? '<span class="pill L">LARGO</span>' : r.pos === -1 ? '<span class="pill S">CORTO</span>' : '<span class="mut">Fuera</span>';
+  let sg = '<span class="mut">—</span>';
+  if (r.sigToday) sg = '<span class="sig">' + esc(r.sigToday) + '</span>' + (r.prov ? '<span class="prov">vela en curso</span>' : "");
+  else if (r.recAgo != null) sg = '<span class="mut">' + esc(r.recSig) + ', hace ' + r.recAgo + (r.recAgo === 1 ? " sesión" : " sesiones") + '</span>';
+  const ent = r.entry ? fmtD(r.entry.ts) + '  <span class="mut">' + fmtP(r.entry.p) + '</span>' : '<span class="mut">—</span>';
+  const fil = !r.enough ? '<span class="mut">Historial corto</span>' : r.fL ? '<span class="pos">Alcista</span>' : r.fS ? '<span class="neg">Bajista</span>' : '<span class="mut">Neutro</span>';
+  const tag = r.stale ? '<span class="prov">sin actualizar</span>' : r.prov ? '<span class="prov">en curso</span>' : "";
+  return '<tr class="row' + sel + '" data-s="' + esc(r.sym) + '"><td>' + name + '</td><td>' + fmtP(r.close) + tag +
+    '</td><td class="' + cls(r.dayChg) + '">' + fmtPct(r.dayChg) + '</td><td>' + est + '</td><td>' + sg + '</td><td>' + ent +
+    '</td><td class="' + cls(r.ret) + '">' + fmtPct(r.ret) + '</td><td>' + fil + '</td></tr>';
+}
+function detailHTML(r){
+  const closed = r.trades.filter(x => x.out != null).map(x => ({...x, ret: x.dir*(r.c[x.out]/r.c[x.in]-1)}));
+  const wins = closed.filter(x => x.ret > 0).length;
+  const sum = closed.reduce((a,x) => a + x.ret, 0);
+  const list = r.trades.slice(-8).reverse().map(x => {
+    const ret = x.out != null ? x.dir*(r.c[x.out]/r.c[x.in]-1) : x.dir*(r.c[r.n-1]/r.c[x.in]-1);
+    return '<tr><td>' + (x.dir === 1 ? '<span class="pill L">Largo</span>' : '<span class="pill S">Corto</span>') + '</td><td>' + fmtD(r.t[x.in]) + ' <span class="mut">' + fmtP(r.c[x.in]) + '</span></td><td>' +
+      (x.out != null ? fmtD(r.t[x.out]) + ' <span class="mut">' + fmtP(r.c[x.out]) + '</span>' : '<span class="mut">Abierta</span>') + '</td><td class="' + cls(ret) + '">' + fmtPct(ret) + '</td></tr>';
+  }).join("");
+  return '<tr class="drow"><td colspan="8"><div class="detail"><h2>' + esc(nameOf(r.sym)) + '</h2><div class="mut" style="font-size:13px">' + esc(r.sym) + ' · ' + esc(r.sec) + ' · último cierre ' + fmtD(r.date) + (r.prov ? ' (vela en curso)' : '') + '</div>' +
+    '<canvas id="cv" aria-label="Gráfico de velas con SMA 6, 70 y 200"></canvas>' +
+    '<div class="legend"><span><i style="background:var(--s6)"></i>SMA 6</span><span><i style="background:var(--s70)"></i>SMA 70</span><span><i style="background:var(--s200)"></i>SMA 200</span><span><i style="background:var(--long)"></i>Entrada largo</span><span><i style="background:var(--short)"></i>Entrada corto</span><span><i style="background:var(--warn)"></i>Salida</span></div>' +
+    '<div class="mut" style="font-size:13px;margin-bottom:8px">Últimos 2 años: ' + closed.length + ' operaciones cerradas, ' + (closed.length ? Math.round(wins/closed.length*100) : 0) + '% ganadoras, suma de resultados ' + fmtPct(closed.length ? sum : null) + '</div>' +
+    (list ? '<div class="tablebox"><table class="trades"><thead><tr><th>Tipo</th><th>Entrada</th><th>Salida</th><th>Resultado</th></tr></thead><tbody>' + list + '</tbody></table></div>' : '<div class="mut">Sin operaciones en el periodo descargado.</div>') +
+    '</div></td></tr>';
+}
+function render(){
+  const ok = results.filter(r => !r.err);
+  const nSig = ok.filter(r => r.sigToday).length, nRec = ok.filter(r => r.recAgo != null).length;
+  const nL = ok.filter(r => r.pos === 1).length, nS = ok.filter(r => r.pos === -1).length;
+  const nE = results.length - ok.length;
+  const st = [["sig", nSig, "Señales hoy"], ["rec", nRec, "Últimos 5 días"], ["L", nL, "En largo"], ["S", nS, "En corto"]];
+  $("stats").innerHTML = cache.at ? st.map(s => '<button class="stat" data-v="' + s[0] + '"><b>' + s[1] + '</b><small>' + s[2] + '</small></button>').join("") +
+    (nE ? '<div class="stat" style="cursor:default"><b class="neg">' + nE + '</b><small>Con error</small></div>' : "") : "";
+  document.querySelectorAll("#stats .stat[data-v]").forEach(b => b.onclick = () => setEstado(b.dataset.v));
+
+  const txt = ui.text.trim().toUpperCase();
+  let rows = results.filter(r => {
+    if (ui.sector !== "all" && r.sec !== ui.sector) return false;
+    if (txt && !r.sym.includes(txt) && !nameOf(r.sym).toUpperCase().includes(txt)) return false;
+    if (ui.estado === "sig") return !r.err && !!r.sigToday;
+    if (ui.estado === "rec") return !r.err && r.recAgo != null;
+    if (ui.estado === "L") return !r.err && r.pos === 1;
+    if (ui.estado === "S") return !r.err && r.pos === -1;
+    return true;
+  });
+  rows.sort((a,b) => rank(a)-rank(b) || a.sym.localeCompare(b.sym));
+  if (!cache.at) { $("tb").innerHTML = '<tr><td colspan="8" class="empty">Pulsa Actualizar datos para descargar el histórico diario y calcular las señales.</td></tr>'; return; }
+  if (!rows.length) { $("tb").innerHTML = '<tr><td colspan="8" class="empty">Ningún ticker cumple este filtro.</td></tr>'; return; }
+  let selR = null;
+  $("tb").innerHTML = rows.map(r => {
+    let s = rowHTML(r);
+    if (ui.sel === r.sym && !r.err) { s += detailHTML(r); selR = r; }
+    return s;
+  }).join("");
+  document.querySelectorAll("#tb tr.row").forEach(tr => tr.onclick = () => toggleDetail(tr.dataset.s));
+  if (selR) drawChart(selR);
+}
+function toggleDetail(sym){
+  ui.sel = ui.sel === sym ? null : sym;
+  render();
+  if (ui.sel) {
+    const tr = document.querySelector('#tb tr.row[data-s="' + CSS.escape(sym) + '"]');
+    if (tr) tr.scrollIntoView({behavior:"smooth", block:"start"});
+  }
+}
+function setEstado(v){
+  ui.estado = v;
+  document.querySelectorAll("#segEstado button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  render();
+}
+
+function drawChart(r){
+  const cv = $("cv"); if (!cv) return;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (!W) return;
+  cv.width = W*dpr; cv.height = H*dpr;
+  const g = cv.getContext("2d"); g.scale(dpr, dpr);
+  const hasOHLC = r.o && r.h && r.l && r.o.length === r.n;
+  const N = Math.min(hasOHLC ? 200 : 260, r.n), st = r.n - N;
+  let lo = Infinity, hi = -Infinity;
+  const arrs = hasOHLC ? [r.h, r.l, r.s6, r.s70, r.s200] : [r.c, r.s6, r.s70, r.s200];
+  for (let i = st; i < r.n; i++) for (const a of arrs) { const v = a[i]; if (v != null) { if (v < lo) lo = v; if (v > hi) hi = v; } }
+  const pad = (hi-lo)*0.06 || 1; lo -= pad; hi += pad;
+  const L = 8, R = 62, T = 8, B = 22, w = W-L-R, h = H-T-B;
+  const step = w/N;
+  const X = i => L + (i-st+0.5)*step, Y = v => T + (hi-v)/(hi-lo)*h;
+  g.font = "11px -apple-system, Helvetica, Arial, sans-serif"; g.fillStyle = "#7d8ea8"; g.strokeStyle = "#18273f"; g.lineWidth = 1;
+  for (let k = 0; k <= 4; k++) { const v = lo + (hi-lo)*k/4, y = Y(v); g.beginPath(); g.moveTo(L, y); g.lineTo(L+w, y); g.stroke(); g.fillText(fmtP(v), L+w+6, y+4); }
+  for (const k of [0, 0.5, 1]) { const i = Math.round(st + k*(N-1)); const tx = new Date(r.t[i]*1000).toLocaleDateString("es-ES",{month:"short",year:"2-digit"}); g.fillText(tx, Math.min(Math.max(X(i)-18, L), L+w-40), H-6); }
+  if (hasOHLC) {
+    const bw = Math.max(1, step*0.62);
+    for (let i = st; i < r.n; i++) {
+      const up = r.c[i] >= r.o[i], col = up ? "#2f9e74" : "#b04a55";
+      g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 1;
+      const x = X(i);
+      g.beginPath(); g.moveTo(x, Y(r.h[i])); g.lineTo(x, Y(r.l[i])); g.stroke();
+      const y1 = Y(Math.max(r.o[i], r.c[i])), y2 = Y(Math.min(r.o[i], r.c[i]));
+      g.fillRect(x - bw/2, y1, bw, Math.max(1, y2 - y1));
+    }
+  }
+  const line = (a, col, lw) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); let m = false; for (let i = st; i < r.n; i++) { if (a[i] == null) { m = false; continue; } if (!m) { g.moveTo(X(i), Y(a[i])); m = true; } else g.lineTo(X(i), Y(a[i])); } g.stroke(); };
+  if (!hasOHLC) line(r.c, "#556682", 1.2);
+  line(r.s200, "#3d8bff", 2); line(r.s70, "#ff4d4d", 2); line(r.s6, "#ffffff", 1.4);
+  for (const x of r.trades) {
+    if (x.in >= st) {
+      const px = X(x.in);
+      g.fillStyle = x.dir === 1 ? "#3fd492" : "#ff6b7a"; g.beginPath();
+      if (x.dir === 1) { const py = Y(hasOHLC ? r.l[x.in] : r.c[x.in]); g.moveTo(px, py+4); g.lineTo(px-6, py+14); g.lineTo(px+6, py+14); }
+      else { const py = Y(hasOHLC ? r.h[x.in] : r.c[x.in]); g.moveTo(px, py-4); g.lineTo(px-6, py-14); g.lineTo(px+6, py-14); }
+      g.closePath(); g.fill();
+    }
+    if (x.out != null && x.out >= st) { g.fillStyle = "#f2b84b"; g.strokeStyle = "#060d1a"; g.lineWidth = 1.5; g.beginPath(); g.arc(X(x.out), Y(r.c[x.out]), 4.5, 0, Math.PI*2); g.fill(); g.stroke(); }
+  }
+}
+
+async function tgSend(text){
+  const tok = cfg.tg.token.trim(), chat = cfg.tg.chat.trim();
+  if (!tok || !chat) throw new Error("Falta el token o el chat ID en Ajustes.");
+  const r = await fetch("https://api.telegram.org/bot" + tok + "/sendMessage", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({chat_id: chat, text})
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.ok) throw new Error(j.description || ("HTTP " + r.status));
+}
+function signalText(onlyConfirmed){
+  const list = results.filter(r => !r.err && r.sigToday && (!onlyConfirmed || !r.prov));
+  if (!list.length) return null;
+  const ico = s => /Entra LARGO/.test(s) ? "🟢" : /Entra CORTO/.test(s) ? "🔴" : "🟡";
+  const d = fmtD(list[0].date);
+  return "📊 Técnica 1, señales del " + d + "\n\n" + list.map(r => ico(r.sigToday) + " " + nameOf(r.sym) + ": " + r.sigToday + " (" + fmtP(r.close) + ")" + (r.prov ? " ⏳ vela en curso" : "")).join("\n");
+}
+async function autoSend(){
+  const txt = signalText(true);
+  if (!txt) return;
+  const sent = load("t1sent");
+  if (sent === txt) return;
+  try { await tgSend(txt); save("t1sent", txt); $("status").textContent += ". Señales enviadas a Telegram"; }
+  catch(e) { $("status").textContent += ". Telegram: " + e.message; }
+}
+
+function readCfgForm(){
+  const a = parseInt($("lb200").value, 10), b = parseInt($("lb70").value, 10);
+  cfg.lb200 = a >= 1 && a <= 100 ? a : DEF.lb200; cfg.lb70 = b >= 1 && b <= 100 ? b : DEF.lb70;
+  document.querySelectorAll("#lists textarea").forEach(t => cfg.lists[t.dataset.k] = t.value);
+  cfg.tg = {token: $("tgToken").value.trim(), chat: $("tgChat").value.trim(), auto: $("tgAuto").checked};
+}
+function initCfg(){
+  $("lb200").value = cfg.lb200; $("lb70").value = cfg.lb70;
+  $("tgToken").value = cfg.tg.token; $("tgChat").value = cfg.tg.chat; $("tgAuto").checked = !!cfg.tg.auto;
+  $("lists").innerHTML = Object.entries(cfg.lists).map(([k,v], i) => '<div><label for="ls' + i + '">' + esc(k) + '</label><textarea id="ls' + i + '" data-k="' + esc(k) + '">' + esc(v) + '</textarea></div>').join("");
+  $("fSector").innerHTML = '<option value="all">Todos los sectores</option>' + Object.keys(cfg.lists).map(k => '<option value="' + esc(k) + '">' + esc(k) + '</option>').join("");
+  $("fSector").value = Object.keys(cfg.lists).includes(ui.sector) ? ui.sector : "all";
+}
+$("saveCfg").onclick = () => {
+  readCfgForm(); save("t1cfg", cfg); initCfg(); compute(); setStatus();
+  const missing = universe().filter(u => !cache.d[u.sym]).length;
+  $("status").textContent = "Ajustes guardados" + (missing ? ". Hay " + missing + " tickers nuevos: pulsa Actualizar datos." : ".");
+};
+$("tgTest").onclick = async () => {
+  readCfgForm(); save("t1cfg", cfg);
+  try { await tgSend("✅ Técnica 1 conectada. Aquí recibirás las señales."); $("status").textContent = "Mensaje de prueba enviado a Telegram."; }
+  catch(e) { $("status").textContent = "Telegram: " + e.message; }
+};
+$("tgSend").onclick = async () => {
+  readCfgForm(); save("t1cfg", cfg);
+  const txt = signalText(false) || "📊 Técnica 1: sin señales hoy.";
+  try { await tgSend(txt); $("status").textContent = "Señales enviadas a Telegram."; }
+  catch(e) { $("status").textContent = "Telegram: " + e.message; }
+};
+$("resetCfg").onclick = () => { const tg = cfg.tg; cfg = JSON.parse(JSON.stringify(DEF)); cfg.tg = tg; save("t1cfg", cfg); initCfg(); compute(); setStatus(); $("status").textContent = "Listas restauradas."; };
+$("clearCache").onclick = () => { cache = {at:0, d:{}}; try { localStorage.removeItem("t1cache"); } catch(e){} ui.sel = null; compute(); setStatus(); $("status").textContent = "Datos borrados. Pulsa Actualizar datos."; };
+$("refresh").onclick = () => refresh(false);
+$("retry").onclick = () => refresh(true);
+document.querySelectorAll("#segEstado button").forEach(b => b.onclick = () => setEstado(b.dataset.v));
+$("fSector").onchange = e => { ui.sector = e.target.value; render(); };
+$("fText").oninput = e => { ui.text = e.target.value; render(); };
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (ui.sel) { const r = results.find(x => x.sym === ui.sel); if (r && !r.err) drawChart(r); } }, 150); });
+
+initCfg();
+compute();
+setStatus();
+</script>
+</body>
+</html>
