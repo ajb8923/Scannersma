@@ -49,7 +49,7 @@ tr.drow>td{padding:0;white-space:normal;background:#081324}
 .pos{color:var(--long)}.neg{color:var(--short)}.mut{color:var(--muted)}
 .prov{font-size:11px;color:var(--warn);margin-left:6px;font-weight:500}
 .empty{padding:26px;text-align:center;color:var(--muted)}
-canvas{width:100%;height:320px;display:block;margin:10px 0 6px}
+canvas{width:100%;height:340px;display:block;margin:10px 0 6px;touch-action:pan-y;cursor:crosshair}
 .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap;margin-bottom:12px}
 .legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}
 .trades{min-width:0}
@@ -296,24 +296,25 @@ function setEstado(v){
   render();
 }
 
+let CH = null;
 function drawChart(r){
   const cv = $("cv"); if (!cv) return;
   const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
   if (!W) return;
   cv.width = W*dpr; cv.height = H*dpr;
-  const g = cv.getContext("2d"); g.scale(dpr, dpr);
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const hasOHLC = r.o && r.h && r.l && r.o.length === r.n;
   const N = Math.min(hasOHLC ? 200 : 260, r.n), st = r.n - N;
   let lo = Infinity, hi = -Infinity;
   const arrs = hasOHLC ? [r.h, r.l, r.s6, r.s70, r.s200] : [r.c, r.s6, r.s70, r.s200];
   for (let i = st; i < r.n; i++) for (const a of arrs) { const v = a[i]; if (v != null) { if (v < lo) lo = v; if (v > hi) hi = v; } }
-  const pad = (hi-lo)*0.06 || 1; lo -= pad; hi += pad;
-  const L = 8, R = 62, T = 8, B = 22, w = W-L-R, h = H-T-B;
+  const pad = (hi-lo)*0.08 || 1; lo -= pad; hi += pad;
+  const L = 8, R = 66, T = 34, B = 24, w = W-L-R, h = H-T-B;
   const step = w/N;
   const X = i => L + (i-st+0.5)*step, Y = v => T + (hi-v)/(hi-lo)*h;
   g.font = "11px -apple-system, Helvetica, Arial, sans-serif"; g.fillStyle = "#7d8ea8"; g.strokeStyle = "#18273f"; g.lineWidth = 1;
   for (let k = 0; k <= 4; k++) { const v = lo + (hi-lo)*k/4, y = Y(v); g.beginPath(); g.moveTo(L, y); g.lineTo(L+w, y); g.stroke(); g.fillText(fmtP(v), L+w+6, y+4); }
-  for (const k of [0, 0.5, 1]) { const i = Math.round(st + k*(N-1)); const tx = new Date(r.t[i]*1000).toLocaleDateString("es-ES",{month:"short",year:"2-digit"}); g.fillText(tx, Math.min(Math.max(X(i)-18, L), L+w-40), H-6); }
+  for (const k of [0, 0.5, 1]) { const i = Math.round(st + k*(N-1)); const tx = new Date(r.t[i]*1000).toLocaleDateString("es-ES",{month:"short",year:"2-digit"}); g.fillText(tx, Math.min(Math.max(X(i)-18, L), L+w-40), H-7); }
   if (hasOHLC) {
     const bw = Math.max(1, step*0.62);
     for (let i = st; i < r.n; i++) {
@@ -338,8 +339,54 @@ function drawChart(r){
     }
     if (x.out != null && x.out >= st) { g.fillStyle = "#f2b84b"; g.strokeStyle = "#060d1a"; g.lineWidth = 1.5; g.beginPath(); g.arc(X(x.out), Y(r.c[x.out]), 4.5, 0, Math.PI*2); g.fill(); g.stroke(); }
   }
+  CH = {r, g, cv, base: g.getImageData(0, 0, cv.width, cv.height), st, N, L, R, T, B, w, h, W, H, step, lo, hi, X, Y, hasOHLC};
+  overlay(null, null);
+  const pick = e => {
+    const rc = cv.getBoundingClientRect();
+    const x = e.clientX - rc.left, y = e.clientY - rc.top;
+    if (x < L || x > L + w) { overlay(null, null); return; }
+    const i = Math.min(r.n - 1, Math.max(st, st + Math.floor((x - L)/step)));
+    overlay(i, Math.min(T + h, Math.max(T, y)));
+  };
+  cv.onpointermove = pick;
+  cv.onpointerdown = pick;
+  cv.onpointerleave = () => overlay(null, null);
+  cv.onpointercancel = () => overlay(null, null);
 }
-
+function overlay(i, py){
+  if (!CH) return;
+  const {r, g, base, L, T, w, h, H, lo, hi, X} = CH;
+  g.putImageData(base, 0, 0);
+  g.font = "11px -apple-system, Helvetica, Arial, sans-serif";
+  const box = (txt, cx, cy, align) => {
+    const tw = g.measureText(txt).width + 10, bh = 18;
+    let bx = align === "center" ? cx - tw/2 : cx;
+    bx = Math.max(L, Math.min(bx, CH.W - tw - 1));
+    g.fillStyle = "#24385a"; g.fillRect(bx, cy - bh/2, tw, bh);
+    g.fillStyle = "#ffffff"; g.fillText(txt, bx + 5, cy + 4);
+  };
+  if (i != null) {
+    const x = X(i);
+    g.save(); g.strokeStyle = "rgba(170,186,210,.55)"; g.lineWidth = 1; g.setLineDash([4, 4]);
+    g.beginPath(); g.moveTo(x, T); g.lineTo(x, T + h); g.moveTo(L, py); g.lineTo(L + w, py); g.stroke(); g.restore();
+    box(fmtP(hi - (py - T)/h*(hi - lo)), L + w + 2, py, "left");
+    box(new Date(r.t[i]*1000).toLocaleDateString("es-ES",{weekday:"short", day:"2-digit", month:"short", year:"2-digit"}), x, H - 11, "center");
+  }
+  const k = i != null ? i : r.n - 1;
+  const items = [["SMA 6", r.s6[k], "#ffffff"], ["SMA 70", r.s70[k], "#ff4d4d"], ["SMA 200", r.s200[k], "#3d8bff"]];
+  g.font = "600 12px -apple-system, Helvetica, Arial, sans-serif";
+  let tx = L + 4;
+  for (const [n, v, col] of items) {
+    const t = n + "  " + (v == null ? "—" : fmtP(v));
+    g.fillStyle = col; g.fillText(t, tx, 16);
+    tx += g.measureText(t).width + 16;
+  }
+  if (CH.hasOHLC) {
+    g.font = "11px -apple-system, Helvetica, Arial, sans-serif"; g.fillStyle = "#7d8ea8";
+    const ch = r.c[k] / (k > 0 ? r.c[k-1] : r.c[k]) - 1;
+    g.fillText("A " + fmtP(r.o[k]) + "   M " + fmtP(r.h[k]) + "   m " + fmtP(r.l[k]) + "   C " + fmtP(r.c[k]) + "   " + fmtPct(ch), L + 4, 30 - 2);
+  }
+}
 $("reload").onclick = loadData;
 document.querySelectorAll("#segEstado button").forEach(b => b.onclick = () => setEstado(b.dataset.v));
 $("fSector").onchange = e => { ui.sector = e.target.value; render(); };
