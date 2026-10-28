@@ -8,6 +8,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import yfinance as yf
@@ -19,8 +20,15 @@ SEND_EMPTY = True   # enviar un aviso corto los días sin señales
 PERIOD = "2y"
 NAMES = {"^NDX": "Nasdaq 100", "^GSPC": "S&P 500", "^DJI": "Dow Jones", "^IBEX": "IBEX 35"}
 STOOQ_IDX = {"^NDX": "^ndx", "^GSPC": "^spx", "^DJI": "^dji"}
-CLOSE_UTC = {"^IBEX": 16.75}   # hora UTC aproximada de cierre; por defecto, Wall Street
-DEFAULT_CLOSE_UTC = 21.1
+CLOSES = {"^IBEX": ("Europe/Madrid", 17, 40)}   # cierre por mercado; por defecto, Wall Street
+DEFAULT_CLOSE = ("America/New_York", 16, 5)
+
+
+def market_closed(sym, now):
+    """True si la sesión de hoy de ese mercado ya ha cerrado (tiene en cuenta horario de verano)."""
+    tz, hh, mm = CLOSES.get(sym, DEFAULT_CLOSE)
+    local = now.astimezone(ZoneInfo(tz))
+    return (local.hour, local.minute) >= (hh, mm), local.date()
 
 
 def read_tickers(path="tickers.txt"):
@@ -179,7 +187,6 @@ def tg_send(text):
 
 def main():
     now = dt.datetime.now(dt.timezone.utc)
-    hour = now.hour + now.minute / 60
     force = os.environ.get("FORCE_SEND", "").lower() == "true"
     prev = {}
     if os.path.exists("data.json"):
@@ -204,7 +211,8 @@ def main():
                 continue
         t, o, h, l, c = to_series(df)
         last = df.index[-1].date()
-        prov = last == now.date() and hour < CLOSE_UTC.get(sym, DEFAULT_CLOSE_UTC)
+        closed, local_today = market_closed(sym, now)
+        prov = last == local_today and not closed
         items.append({**base, "src": src, "prov": prov, "t": t, "o": o, "h": h, "l": l, "c": c})
         print(f"{sym}: {len(c)} velas ({src})")
         time.sleep(0.3)
