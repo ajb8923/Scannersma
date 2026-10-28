@@ -65,7 +65,7 @@ def from_stooq(sym):
         raise ValueError("sin fuente alternativa")
     url = "https://stooq.com/q/d/l/?s=" + urllib.parse.quote(s) + "&i=d"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    txt = urllib.request.urlopen(req, timeout=25).read().decode("utf-8", "ignore")
+    txt = urllib.request.urlopen(req, timeout=8).read().decode("utf-8", "ignore")
     if not txt.startswith("Date"):
         raise ValueError("sin datos en Stooq")
     df = pd.read_csv(io.StringIO(txt), parse_dates=["Date"]).set_index("Date").tail(510)
@@ -198,6 +198,7 @@ def main():
             prev = {}
 
     items, errors = [], []
+    stooq_fails = 0
     for sym, sec in read_tickers():
         base = {"s": sym, "sec": sec, "name": NAMES.get(sym, sym)}
         src = "yahoo"
@@ -205,26 +206,31 @@ def main():
             df = from_yahoo(sym)
         except Exception as e1:
             try:
+                if stooq_fails >= 3:
+                    raise ValueError("Stooq no responde")
                 df = from_stooq(sym); src = "stooq"
             except Exception as e2:
+                stooq_fails += 1
                 print(f"{sym}: error ({e1}; {e2})")
                 errors.append(sym)
                 items.append({**base, "err": "Sin datos en Yahoo ni en Stooq. Revisa el ticker."})
                 continue
         closed, local_today = market_closed(sym, now)
         last = df.index[-1].date()
-        if closed and local_today.weekday() < 5 and last < local_today and src == "yahoo":
-            # Yahoo no trae aún la vela de hoy: probar con Stooq
+        if closed and local_today.weekday() < 5 and last < local_today and src == "yahoo" and stooq_fails < 3:
+            # Yahoo no trae aún la vela de hoy: probar con Stooq (se abandona tras 3 fallos seguidos)
             try:
                 df2 = from_stooq(sym)
+                stooq_fails = 0
                 if df2.index[-1].date() >= local_today:
                     df, src, last = df2, "stooq", df2.index[-1].date()
             except Exception:
-                pass
+                stooq_fails += 1
         t, o, h, l, c = to_series(df)
         prov = last == local_today and not closed
         grp = CLOSES.get(sym, DEFAULT_CLOSE)[0]
-        items.append({**base, "src": src, "prov": prov, "grp": grp, "t": t, "o": o, "h": h, "l": l, "c": c})
+        missing = closed and local_today.weekday() < 5 and last < local_today
+        items.append({**base, "src": src, "prov": prov, "grp": grp, "missing": missing, "t": t, "o": o, "h": h, "l": l, "c": c})
         print(f"{sym}: {len(c)} velas, última {last}{' (en curso)' if prov else ''} ({src})")
         time.sleep(0.3)
 
@@ -235,7 +241,7 @@ def main():
             last_by_grp[it["grp"]] = max(last_by_grp.get(it["grp"], 0), it["t"][-1])
     main_bar = last_by_grp.get(DEFAULT_CLOSE[0]) or max(last_by_grp.values(), default=None)
     last_key = fdate(main_bar) if main_bar else None
-    stale = [it["s"] for it in ok if not it["prov"] and it["t"][-1] < last_by_grp.get(it["grp"], 0)]
+    stale = [it["s"] for it in ok if it.get("missing") or (not it["prov"] and it["t"][-1] < last_by_grp.get(it["grp"], 0))]
 
     blocks, n_long, n_short = [], 0, 0
     for it in ok:
@@ -266,7 +272,7 @@ def main():
         if errors:
             foot += f"\n⚠️ Sin datos: {', '.join(errors)}"
         if stale:
-            foot += f"\n⚠️ Sin la vela de hoy: {', '.join(stale)}"
+            foot += f"\n⚠️ Sin la vela de hoy ({len(stale)}): {', '.join(stale[:25])}{'…' if len(stale) > 25 else ''}"
         msg = None
         if blocks:
             msg = f"📊 <b>Scanner SMA</b> · {len(blocks)} señal{'es' if len(blocks) != 1 else ''} del {last_key}\n\n" + "\n\n".join(blocks) + foot + link
@@ -286,4 +292,6 @@ def main():
 
 
 if __name__ == "__main__":
+    import builtins, functools
+    builtins.print = functools.partial(builtins.print, flush=True)
     main()
