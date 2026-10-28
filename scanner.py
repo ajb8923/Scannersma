@@ -1,5 +1,6 @@
 """Scanner SMA 6/70/200 en velas diarias.
-Descarga datos, calcula señales, guarda data.json para la app y avisa por Telegram."""
+Descarga datos del servicio de gráficos de Yahoo (con yfinance y Stooq de respaldo),
+calcula señales, guarda data.json para la app y avisa por Telegram."""
 import datetime as dt
 import html
 import io
@@ -10,8 +11,9 @@ import urllib.parse
 import urllib.request
 from zoneinfo import ZoneInfo
 
+import urllib.error
+
 import pandas as pd
-import yfinance as yf
 
 # ---------- Configuración ----------
 LB200 = 20          # sesiones para medir la pendiente de la SMA 200
@@ -48,14 +50,60 @@ def read_tickers(path="tickers.txt"):
     return out
 
 
-def from_yahoo(sym):
+UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+
+
+def from_yahoo_chart(sym):
+    """Llamada directa al servicio de gráficos de Yahoo, igual que la app antigua. Incluye la vela del día."""
+    last = ValueError("sin respuesta")
+    for host in ("query1", "query2"):
+        url = (f"https://{host}.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(sym)}"
+               "?range=2y&interval=1d&includePrePost=false")
+        for attempt in range(2):
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
+                j = json.loads(urllib.request.urlopen(req, timeout=15).read().decode())
+                chart = j.get("chart") or {}
+                res = chart.get("result")
+                if not res:
+                    raise ValueError((chart.get("error") or {}).get("description", "sin datos"))
+                r = res[0]
+                ts = r.get("timestamp") or []
+                q = r["indicators"]["quote"][0]
+                tz = ZoneInfo(r.get("meta", {}).get("exchangeTimezoneName") or "America/New_York")
+                idx, rows = [], []
+                for k, t in enumerate(ts):
+                    c = q["close"][k]
+                    if c is None:
+                        continue
+                    idx.append(pd.Timestamp(dt.datetime.fromtimestamp(t, tz).date()))
+                    rows.append((q["open"][k], q["high"][k], q["low"][k], c))
+                df = pd.DataFrame(rows, columns=["Open", "High", "Low", "Close"], index=pd.DatetimeIndex(idx), dtype="float")
+                df = df[~df.index.duplicated(keep="last")]
+                if len(df) < 2:
+                    raise ValueError("sin datos")
+                return df
+            except urllib.error.HTTPError as e:
+                last = e
+                if e.code == 404:
+                    raise ValueError("ticker no encontrado en Yahoo")
+                time.sleep(2 * (attempt + 1))
+            except Exception as e:
+                last = e
+                time.sleep(1)
+    raise last
+
+
+def from_yfinance(sym):
+    import yfinance as yf
     today = dt.date.today()
     df = yf.Ticker(sym).history(start=(today - dt.timedelta(days=740)).isoformat(),
                                 end=(today + dt.timedelta(days=2)).isoformat(),
                                 interval="1d", auto_adjust=False, actions=False)
     df = df.dropna(subset=["Close"])
     if len(df) < 2:
-        raise ValueError("sin datos en Yahoo")
+        raise ValueError("sin datos en yfinance")
+    df.index = pd.DatetimeIndex([pd.Timestamp(d.date()) for d in df.index])
     return df
 
 
@@ -201,31 +249,39 @@ def main():
     stooq_fails = 0
     for sym, sec in read_tickers():
         base = {"s": sym, "sec": sec, "name": NAMES.get(sym, sym)}
-        src = "yahoo"
-        try:
-            df = from_yahoo(sym)
-        except Exception as e1:
-            try:
-                if stooq_fails >= 3:
-                    raise ValueError("Stooq no responde")
-                df = from_stooq(sym); src = "stooq"
-            except Exception as e2:
-                stooq_fails += 1
-                print(f"{sym}: error ({e1}; {e2})")
-                errors.append(sym)
-                items.append({**base, "err": "Sin datos en Yahoo ni en Stooq. Revisa el ticker."})
+        df, src, errs = None, None, []
+        for name, fn in (("yahoo", from_yahoo_chart), ("yfinance", from_yfinance), ("stooq", from_stooq)):
+            if name == "stooq" and stooq_fails >= 3:
                 continue
+            try:
+                df, src = fn(sym), name
+                if name == "stooq":
+                    stooq_fails = 0
+                break
+            except Exception as e:
+                errs.append(f"{name}: {e}")
+                if name == "stooq":
+                    stooq_fails += 1
+        if df is None:
+            print(f"{sym}: error ({'; '.join(errs)})")
+            errors.append(sym)
+            items.append({**base, "err": "Sin datos en Yahoo ni en Stooq. Revisa el ticker."})
+            continue
         closed, local_today = market_closed(sym, now)
         last = df.index[-1].date()
-        if closed and local_today.weekday() < 5 and last < local_today and src == "yahoo" and stooq_fails < 3:
-            # Yahoo no trae aún la vela de hoy: probar con Stooq (se abandona tras 3 fallos seguidos)
-            try:
-                df2 = from_stooq(sym)
-                stooq_fails = 0
-                if df2.index[-1].date() >= local_today:
-                    df, src, last = df2, "stooq", df2.index[-1].date()
-            except Exception:
-                stooq_fails += 1
+        if closed and local_today.weekday() < 5 and last < local_today:
+            # Falta la vela de hoy: probar las otras fuentes
+            for name, fn in (("yfinance", from_yfinance), ("stooq", from_stooq)):
+                if name == src or (name == "stooq" and stooq_fails >= 3):
+                    continue
+                try:
+                    df2 = fn(sym)
+                    if df2.index[-1].date() >= local_today:
+                        df, src, last = df2, name, df2.index[-1].date()
+                        break
+                except Exception:
+                    if name == "stooq":
+                        stooq_fails += 1
         t, o, h, l, c = to_series(df)
         prov = last == local_today and not closed
         grp = CLOSES.get(sym, DEFAULT_CLOSE)[0]
