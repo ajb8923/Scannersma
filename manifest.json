@@ -1,0 +1,17 @@
+{
+  "name": "Scanner SMA",
+  "short_name": "Scanner SMA",
+  "description": "Escáner de cruces SMA 6/70/200 en velas diarias",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#060d1a",
+  "theme_color": "#060d1a",
+  "lang": "es",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

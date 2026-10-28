@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Scanner SMA">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#060d1a">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
 <title>Scanner SMA</title>
 <style>
 :root{--bg:#060d1a;--panel:#0b1628;--line:#18273f;--text:#dce6f3;--muted:#7d8ea8;--long:#3fd492;--short:#ff6b7a;--warn:#f2b84b;--s6:#ffffff;--s70:#ff4d4d;--s200:#3d8bff;color-scheme:dark}
@@ -36,7 +41,8 @@ select,input[type=search],input[type=number],input[type=text],input[type=passwor
 .tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
 table{border-collapse:collapse;width:100%;min-width:820px;font-variant-numeric:tabular-nums}
 th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
-th{font-weight:500;color:var(--muted);font-size:13px;background:#08121f}
+th{font-weight:500;color:var(--muted);font-size:13px;background:#08121f;cursor:pointer;user-select:none;-webkit-user-select:none}th:hover{color:var(--text)}th.on{color:var(--text)}th .ar{font-size:10px;margin-left:4px}
+.zoom{display:flex;gap:6px;align-items:center;margin-top:10px}.zoom button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 12px;cursor:pointer;font-size:15px}.zoom span{font-size:12px;color:var(--muted);margin-left:6px}
 tr.row{cursor:pointer}tr.row:hover td{background:#0a1526}
 tr.sel td{background:#0d1d36}
 tr.drow>td{padding:0;white-space:normal;background:#081324}
@@ -49,7 +55,7 @@ tr.drow>td{padding:0;white-space:normal;background:#081324}
 .pos{color:var(--long)}.neg{color:var(--short)}.mut{color:var(--muted)}
 .prov{font-size:11px;color:var(--warn);margin-left:6px;font-weight:500}
 .empty{padding:26px;text-align:center;color:var(--muted)}
-canvas{width:100%;height:340px;display:block;margin:10px 0 6px;touch-action:pan-y;cursor:crosshair}
+canvas{width:100%;height:360px;display:block;margin:8px 0 6px;touch-action:pan-y;cursor:crosshair}
 .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap;margin-bottom:12px}
 .legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}
 .trades{min-width:0}
@@ -93,7 +99,7 @@ textarea{width:100%;min-height:96px;background:var(--bg);border:1px solid var(--
 </div>
 <div class="tablebox">
   <table>
-    <thead><tr><th>Ticker</th><th>Cierre</th><th>Día</th><th>Estado</th><th>Señal</th><th>Entrada</th><th>Resultado</th><th>Filtro hoy</th></tr></thead>
+    <thead><tr id="thead"><th data-k="tk">Ticker</th><th data-k="close">Cierre</th><th data-k="day">Día</th><th data-k="pos">Estado</th><th data-k="sig">Señal</th><th data-k="entry">Entrada</th><th data-k="ret">Resultado</th><th data-k="fil">Filtro hoy</th></tr></thead>
     <tbody id="tb"></tbody>
   </table>
 </div>
@@ -118,7 +124,8 @@ const cls = v => v == null ? "mut" : v >= 0 ? "pos" : "neg";
 
 let DATA = null;
 let cfg = {lb200:20, lb70:10};
-let ui = {estado:"all", sector:"all", text:"", sel:null};
+let ui = {estado:"all", sector:"all", text:"", sel:null, sort:null, dir:1};
+let VIEW = {sym:null, N:0, end:0};
 let results = [];
 const cache = {at:0};
 
@@ -131,7 +138,8 @@ async function loadData(){
     const r = await fetch("data.json?v=" + Date.now(), {cache:"no-store"});
     if (!r.ok) throw new Error(r.status === 404 ? "nodata" : "HTTP " + r.status);
     DATA = await r.json();
-    try { localStorage.setItem("smaData", JSON.stringify(DATA)); } catch(e){}
+    if (r.headers.get("X-SW-Cache")) offline = true;
+    else { try { localStorage.setItem("smaData", JSON.stringify(DATA)); } catch(e){} }
   } catch(e) {
     const saved = load("smaData");
     if (saved) { DATA = saved; offline = true; }
@@ -244,6 +252,7 @@ function detailHTML(r){
       (x.out != null ? fmtD(r.t[x.out]) + ' <span class="mut">' + fmtP(r.c[x.out]) + '</span>' : '<span class="mut">Abierta</span>') + '</td><td class="' + cls(ret) + '">' + fmtPct(ret) + '</td></tr>';
   }).join("");
   return '<tr class="drow"><td colspan="8"><div class="detail"><h2>' + esc(r.name) + '</h2><div class="mut" style="font-size:13px">' + esc(r.sym) + ' · ' + esc(r.sec) + ' · último cierre ' + fmtD(r.date) + (r.prov ? ' (vela en curso)' : '') + '</div>' +
+    '<div class="zoom"><button id="zOut" aria-label="Alejar">−</button><button id="zIn" aria-label="Acercar">+</button><button id="zReset">Restablecer</button><span>Rueda o pellizco para zoom, arrastrar para mover</span></div>' +
     '<canvas id="cv" aria-label="Gráfico de velas con SMA 6, 70 y 200"></canvas>' +
     '<div class="legend"><span><i style="background:var(--s6)"></i>SMA 6</span><span><i style="background:var(--s70)"></i>SMA 70</span><span><i style="background:var(--s200)"></i>SMA 200</span><span><i style="background:var(--long)"></i>Entrada largo</span><span><i style="background:var(--short)"></i>Entrada corto</span><span><i style="background:var(--warn)"></i>Salida</span></div>' +
     '<div class="mut" style="font-size:13px;margin-bottom:8px">Últimos 2 años: ' + closed.length + ' operaciones cerradas, ' + (closed.length ? Math.round(wins/closed.length*100) : 0) + '% ganadoras, suma de resultados ' + fmtPct(closed.length ? sum : null) + '</div>' +
@@ -270,7 +279,23 @@ function render(){
     if (ui.estado === "S") return !r.err && r.pos === -1;
     return true;
   });
-  rows.sort((a,b) => rank(a)-rank(b) || a.sym.localeCompare(b.sym));
+  if (ui.sort) {
+    const val = sortVal[ui.sort];
+    rows.sort((a, b) => {
+      if (!!a.err !== !!b.err) return a.err ? 1 : -1;
+      const va = a.err ? null : val(a), vb = b.err ? null : val(b);
+      if (va == null && vb == null) return a.name.localeCompare(b.name);
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      const c = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+      return c * ui.dir || a.name.localeCompare(b.name);
+    });
+  } else rows.sort((a,b) => rank(a)-rank(b) || a.sym.localeCompare(b.sym));
+  document.querySelectorAll("#thead th").forEach(th => {
+    const on = th.dataset.k === ui.sort;
+    th.classList.toggle("on", on);
+    th.innerHTML = th.textContent.replace(/[▲▼]/g, "").trim() + (on ? '<span class="ar">' + (ui.dir === 1 ? "▲" : "▼") + '</span>' : "");
+  });
   if (!cache.at) { $("tb").innerHTML = '<tr><td colspan="8" class="empty">Pulsa Actualizar datos para descargar el histórico diario y calcular las señales.</td></tr>'; return; }
   if (!rows.length) { $("tb").innerHTML = '<tr><td colspan="8" class="empty">Ningún ticker cumple este filtro.</td></tr>'; return; }
   let selR = null;
@@ -281,6 +306,22 @@ function render(){
   }).join("");
   document.querySelectorAll("#tb tr.row").forEach(tr => tr.onclick = () => toggleDetail(tr.dataset.s));
   if (selR) drawChart(selR);
+}
+const sortVal = {
+  tk: r => r.name.toUpperCase(),
+  close: r => r.close,
+  day: r => r.dayChg,
+  pos: r => r.pos === 1 ? 0 : r.pos === -1 ? 1 : 2,
+  sig: r => r.sigToday ? 0 : r.recAgo != null ? r.recAgo : null,
+  entry: r => r.entry ? r.entry.ts : null,
+  ret: r => r.ret,
+  fil: r => !r.enough ? null : r.fL ? 0 : r.fS ? 2 : 1
+};
+function setSort(k){
+  if (ui.sort !== k) { ui.sort = k; ui.dir = (k === "day" || k === "ret" || k === "close" || k === "entry") ? -1 : 1; }
+  else if (ui.dir === (["day","ret","close","entry"].includes(k) ? -1 : 1)) ui.dir = -ui.dir;
+  else { ui.sort = null; ui.dir = 1; }
+  render();
 }
 function toggleDetail(sym){
   ui.sel = ui.sel === sym ? null : sym;
@@ -304,10 +345,13 @@ function drawChart(r){
   cv.width = W*dpr; cv.height = H*dpr;
   const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const hasOHLC = r.o && r.h && r.l && r.o.length === r.n;
-  const N = Math.min(hasOHLC ? 200 : 260, r.n), st = r.n - N;
+  if (VIEW.sym !== r.sym || VIEW.n !== r.n) VIEW = {sym: r.sym, n: r.n, N: Math.min(hasOHLC ? 200 : 260, r.n), end: r.n - 1};
+  VIEW.N = Math.max(20, Math.min(r.n, Math.round(VIEW.N)));
+  VIEW.end = Math.max(VIEW.N - 1, Math.min(r.n - 1, Math.round(VIEW.end)));
+  const N = VIEW.N, en = VIEW.end, st = en - N + 1;
   let lo = Infinity, hi = -Infinity;
   const arrs = hasOHLC ? [r.h, r.l, r.s6, r.s70, r.s200] : [r.c, r.s6, r.s70, r.s200];
-  for (let i = st; i < r.n; i++) for (const a of arrs) { const v = a[i]; if (v != null) { if (v < lo) lo = v; if (v > hi) hi = v; } }
+  for (let i = st; i <= en; i++) for (const a of arrs) { const v = a[i]; if (v != null) { if (v < lo) lo = v; if (v > hi) hi = v; } }
   const pad = (hi-lo)*0.08 || 1; lo -= pad; hi += pad;
   const L = 8, R = 66, T = 12, B = 24, w = W-L-R, h = H-T-B;
   const step = w/N;
@@ -317,7 +361,7 @@ function drawChart(r){
   for (const k of [0, 0.5, 1]) { const i = Math.round(st + k*(N-1)); const tx = new Date(r.t[i]*1000).toLocaleDateString("es-ES",{month:"short",year:"2-digit"}); g.fillText(tx, Math.min(Math.max(X(i)-18, L), L+w-40), H-7); }
   if (hasOHLC) {
     const bw = Math.max(1, step*0.62);
-    for (let i = st; i < r.n; i++) {
+    for (let i = st; i <= en; i++) {
       const up = r.c[i] >= r.o[i], col = up ? "#2f9e74" : "#b04a55";
       g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 1;
       const x = X(i);
@@ -326,32 +370,98 @@ function drawChart(r){
       g.fillRect(x - bw/2, y1, bw, Math.max(1, y2 - y1));
     }
   }
-  const line = (a, col, lw) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); let m = false; for (let i = st; i < r.n; i++) { if (a[i] == null) { m = false; continue; } if (!m) { g.moveTo(X(i), Y(a[i])); m = true; } else g.lineTo(X(i), Y(a[i])); } g.stroke(); };
+  const line = (a, col, lw) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); let m = false; for (let i = st; i <= en; i++) { if (a[i] == null) { m = false; continue; } if (!m) { g.moveTo(X(i), Y(a[i])); m = true; } else g.lineTo(X(i), Y(a[i])); } g.stroke(); };
   if (!hasOHLC) line(r.c, "#556682", 1.2);
   line(r.s200, "#3d8bff", 2); line(r.s70, "#ff4d4d", 2); line(r.s6, "#ffffff", 1.4);
   for (const x of r.trades) {
-    if (x.in >= st) {
+    if (x.in >= st && x.in <= en) {
       const px = X(x.in);
       g.fillStyle = x.dir === 1 ? "#3fd492" : "#ff6b7a"; g.beginPath();
       if (x.dir === 1) { const py = Y(hasOHLC ? r.l[x.in] : r.c[x.in]); g.moveTo(px, py+4); g.lineTo(px-6, py+14); g.lineTo(px+6, py+14); }
       else { const py = Y(hasOHLC ? r.h[x.in] : r.c[x.in]); g.moveTo(px, py-4); g.lineTo(px-6, py-14); g.lineTo(px+6, py-14); }
       g.closePath(); g.fill();
     }
-    if (x.out != null && x.out >= st) { g.fillStyle = "#f2b84b"; g.strokeStyle = "#060d1a"; g.lineWidth = 1.5; g.beginPath(); g.arc(X(x.out), Y(r.c[x.out]), 4.5, 0, Math.PI*2); g.fill(); g.stroke(); }
+    if (x.out != null && x.out >= st && x.out <= en) { g.fillStyle = "#f2b84b"; g.strokeStyle = "#060d1a"; g.lineWidth = 1.5; g.beginPath(); g.arc(X(x.out), Y(r.c[x.out]), 4.5, 0, Math.PI*2); g.fill(); g.stroke(); }
   }
-  CH = {r, g, cv, base: g.getImageData(0, 0, cv.width, cv.height), st, N, L, R, T, B, w, h, W, H, step, lo, hi, X, Y, hasOHLC};
+  CH = {r, g, cv, base: g.getImageData(0, 0, cv.width, cv.height), st, en, N, L, R, T, B, w, h, W, H, step, lo, hi, X, Y, hasOHLC};
   overlay(null, null);
-  const pick = e => {
-    const rc = cv.getBoundingClientRect();
-    const x = e.clientX - rc.left, y = e.clientY - rc.top;
-    if (x < L || x > L + w) { overlay(null, null); return; }
-    const i = Math.min(r.n - 1, Math.max(st, st + Math.floor((x - L)/step)));
-    overlay(i, Math.min(T + h, Math.max(T, y)));
+  if (!cv._bound) bindChart(cv);
+}
+function resetView(){ if (!CH) return; const r = CH.r; VIEW.N = Math.min(r.n, CH.hasOHLC ? 200 : 260); VIEW.end = r.n - 1; drawChart(r); }
+function zoomAt(factor, frac){
+  if (!CH) return;
+  const {r, st, N} = CH;
+  const anchor = st + frac * N;
+  const nN = Math.max(20, Math.min(r.n, Math.round(N * factor)));
+  VIEW.N = nN; VIEW.end = Math.round(anchor - frac * nN + nN - 1);
+  drawChart(r);
+}
+function bindChart(cv){
+  cv._bound = true;
+  const pts = new Map();
+  let drag = null, pinch = null, lastTap = 0;
+  const local = e => { const rc = cv.getBoundingClientRect(); return {x: e.clientX - rc.left, y: e.clientY - rc.top}; };
+  const fracOf = x => Math.min(1, Math.max(0, (x - CH.L) / CH.w));
+  const cross = p => {
+    const {L, w, T, h, st, en, step} = CH;
+    if (p.x < L || p.x > L + w) { overlay(null, null); return; }
+    const i = Math.min(en, Math.max(st, st + Math.floor((p.x - L) / step)));
+    overlay(i, Math.min(T + h, Math.max(T, p.y)));
   };
-  cv.onpointermove = pick;
-  cv.onpointerdown = pick;
-  cv.onpointerleave = () => overlay(null, null);
-  cv.onpointercancel = () => overlay(null, null);
+  cv.addEventListener("pointerdown", e => {
+    if (!CH) return;
+    const p = local(e); pts.set(e.pointerId, p);
+    try { cv.setPointerCapture(e.pointerId); } catch(_) {}
+    if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      pinch = {d: Math.max(20, Math.abs(a.x - b.x)), N: CH.N, end: CH.en, cx: (a.x + b.x) / 2};
+      drag = null;
+    } else if (e.pointerType === "mouse") {
+      drag = {x: p.x, end: CH.en, moved: false};
+    } else {
+      const now = Date.now();
+      if (now - lastTap < 300) { lastTap = 0; resetView(); return; }
+      lastTap = now; cross(p);
+    }
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!CH) return;
+    const p = local(e);
+    if (pts.has(e.pointerId)) pts.set(e.pointerId, p);
+    if (pinch && pts.size >= 2) {
+      const [a, b] = [...pts.values()];
+      const d = Math.max(20, Math.abs(a.x - b.x)), cx = (a.x + b.x) / 2;
+      const frac = fracOf(pinch.cx);
+      const nN = Math.max(20, Math.min(CH.r.n, Math.round(pinch.N * pinch.d / d)));
+      const anchor = (pinch.end - pinch.N + 1) + frac * pinch.N;
+      const shift = (cx - pinch.cx) / (CH.w / nN);
+      VIEW.N = nN; VIEW.end = Math.round(anchor - frac * nN + nN - 1 - shift);
+      drawChart(CH.r);
+      return;
+    }
+    if (drag) {
+      const dx = p.x - drag.x;
+      if (Math.abs(dx) > 3) drag.moved = true;
+      if (drag.moved) { VIEW.end = Math.round(drag.end - dx / CH.step); drawChart(CH.r); return; }
+    }
+    cross(p);
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (e.pointerType === "mouse") drag = null; };
+  cv.addEventListener("pointerup", up);
+  cv.addEventListener("pointercancel", e => { up(e); overlay(null, null); });
+  cv.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") { drag = null; overlay(null, null); } });
+  cv.addEventListener("dblclick", resetView);
+  cv.addEventListener("wheel", e => {
+    if (!CH) return;
+    e.preventDefault();
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) { VIEW.end = Math.round(CH.en + e.deltaX / CH.step / 2); drawChart(CH.r); return; }
+    zoomAt(e.deltaY > 0 ? 1.12 : 1/1.12, fracOf(local(e).x));
+  }, {passive:false});
+  cv.addEventListener("gesturestart", e => e.preventDefault());
+  const zi = $("zIn"), zo = $("zOut"), zr = $("zReset");
+  if (zi) zi.onclick = () => zoomAt(1/1.4, 1);
+  if (zo) zo.onclick = () => zoomAt(1.4, 1);
+  if (zr) zr.onclick = resetView;
 }
 function overlay(i, py){
   if (!CH) return;
@@ -372,7 +482,7 @@ function overlay(i, py){
     box(fmtP(hi - (py - T)/h*(hi - lo)), L + w + 2, py, "left");
     box(new Date(r.t[i]*1000).toLocaleDateString("es-ES",{weekday:"short", day:"2-digit", month:"short", year:"2-digit"}), x, H - 11, "center");
   }
-  const k = i != null ? i : r.n - 1;
+  const k = i != null ? i : CH.en;
   const rows = [];
   if (CH.hasOHLC) {
     const ch = r.c[k] / (k > 0 ? r.c[k-1] : r.c[k]) - 1;
@@ -393,12 +503,17 @@ function overlay(i, py){
   });
 }
 $("reload").onclick = loadData;
+document.querySelectorAll("#thead th").forEach(th => th.onclick = () => setSort(th.dataset.k));
 document.querySelectorAll("#segEstado button").forEach(b => b.onclick = () => setEstado(b.dataset.v));
 $("fSector").onchange = e => { ui.sector = e.target.value; render(); };
 $("fText").oninput = e => { ui.text = e.target.value; render(); };
 let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (ui.sel) { const r = results.find(x => x.sym === ui.sel); if (r && !r.err) drawChart(r); } }, 150); });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && cache.at && Date.now() - cache.at > 6*3600*1000) loadData(); });
 loadData();
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+}
+window.addEventListener("online", () => loadData());
 </script>
 </body>
 </html>
