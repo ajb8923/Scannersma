@@ -309,7 +309,7 @@ function drawChart(r){
   const arrs = hasOHLC ? [r.h, r.l, r.s6, r.s70, r.s200] : [r.c, r.s6, r.s70, r.s200];
   for (let i = st; i < r.n; i++) for (const a of arrs) { const v = a[i]; if (v != null) { if (v < lo) lo = v; if (v > hi) hi = v; } }
   const pad = (hi-lo)*0.08 || 1; lo -= pad; hi += pad;
-  const L = 8, R = 66, T = 34, B = 24, w = W-L-R, h = H-T-B;
+  const L = 8, R = 66, T = 12, B = 24, w = W-L-R, h = H-T-B;
   const step = w/N;
   const X = i => L + (i-st+0.5)*step, Y = v => T + (hi-v)/(hi-lo)*h;
   g.font = "11px -apple-system, Helvetica, Arial, sans-serif"; g.fillStyle = "#7d8ea8"; g.strokeStyle = "#18273f"; g.lineWidth = 1;
@@ -373,19 +373,24 @@ function overlay(i, py){
     box(new Date(r.t[i]*1000).toLocaleDateString("es-ES",{weekday:"short", day:"2-digit", month:"short", year:"2-digit"}), x, H - 11, "center");
   }
   const k = i != null ? i : r.n - 1;
-  const items = [["SMA 6", r.s6[k], "#ffffff"], ["SMA 70", r.s70[k], "#ff4d4d"], ["SMA 200", r.s200[k], "#3d8bff"]];
-  g.font = "600 12px -apple-system, Helvetica, Arial, sans-serif";
-  let tx = L + 4;
-  for (const [n, v, col] of items) {
-    const t = n + "  " + (v == null ? "—" : fmtP(v));
-    g.fillStyle = col; g.fillText(t, tx, 16);
-    tx += g.measureText(t).width + 16;
-  }
+  const rows = [];
   if (CH.hasOHLC) {
-    g.font = "11px -apple-system, Helvetica, Arial, sans-serif"; g.fillStyle = "#7d8ea8";
     const ch = r.c[k] / (k > 0 ? r.c[k-1] : r.c[k]) - 1;
-    g.fillText("A " + fmtP(r.o[k]) + "   M " + fmtP(r.h[k]) + "   m " + fmtP(r.l[k]) + "   C " + fmtP(r.c[k]) + "   " + fmtPct(ch), L + 4, 30 - 2);
+    rows.push(["A " + fmtP(r.o[k]) + "  M " + fmtP(r.h[k]) + "  m " + fmtP(r.l[k]) + "  C " + fmtP(r.c[k]) + "  " + fmtPct(ch), "#9aabc4", "11px"]);
   }
+  rows.push(["SMA 6   " + (r.s6[k] == null ? "—" : fmtP(r.s6[k])), "#ffffff", "600 12px"]);
+  rows.push(["SMA 70   " + (r.s70[k] == null ? "—" : fmtP(r.s70[k])), "#ff4d4d", "600 12px"]);
+  rows.push(["SMA 200   " + (r.s200[k] == null ? "—" : fmtP(r.s200[k])), "#3d8bff", "600 12px"]);
+  let bw = 0;
+  for (const [t, , f] of rows) { g.font = f + " -apple-system, Helvetica, Arial, sans-serif"; bw = Math.max(bw, g.measureText(t).width); }
+  const lh = 17, x0 = L + 4, y0 = T + 2;
+  g.fillStyle = "rgba(6,13,26,.78)";
+  g.fillRect(x0 - 4, y0, bw + 12, rows.length * lh + 6);
+  rows.forEach(([t, col, f], n) => {
+    g.font = f + " -apple-system, Helvetica, Arial, sans-serif";
+    g.fillStyle = col;
+    g.fillText(t, x0 + 2, y0 + 15 + n * lh);
+  });
 }
 $("reload").onclick = loadData;
 document.querySelectorAll("#segEstado button").forEach(b => b.onclick = () => setEstado(b.dataset.v));
