@@ -2,7 +2,8 @@ name: Scanner SMA
 
 on:
   schedule:
-    - cron: "30 21 * * 1-5"
+    - cron: "20 20 * * 1-5"
+    - cron: "20 21 * * 1-5"
   workflow_dispatch:
     inputs:
       forzar_envio:
