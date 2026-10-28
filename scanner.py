@@ -17,7 +17,6 @@ import yfinance as yf
 LB200 = 20          # sesiones para medir la pendiente de la SMA 200
 LB70 = 10           # sesiones para medir la pendiente de la SMA 70
 SEND_EMPTY = True   # enviar un aviso corto los días sin señales
-PERIOD = "2y"
 NAMES = {"^NDX": "Nasdaq 100", "^GSPC": "S&P 500", "^DJI": "Dow Jones", "^IBEX": "IBEX 35"}
 STOOQ_IDX = {"^NDX": "^ndx", "^GSPC": "^spx", "^DJI": "^dji"}
 CLOSES = {"^IBEX": ("Europe/Madrid", 17, 40)}   # cierre por mercado; por defecto, Wall Street
@@ -50,7 +49,10 @@ def read_tickers(path="tickers.txt"):
 
 
 def from_yahoo(sym):
-    df = yf.Ticker(sym).history(period=PERIOD, interval="1d", auto_adjust=False, actions=False)
+    today = dt.date.today()
+    df = yf.Ticker(sym).history(start=(today - dt.timedelta(days=740)).isoformat(),
+                                end=(today + dt.timedelta(days=2)).isoformat(),
+                                interval="1d", auto_adjust=False, actions=False)
     df = df.dropna(subset=["Close"])
     if len(df) < 2:
         raise ValueError("sin datos en Yahoo")
@@ -209,24 +211,38 @@ def main():
                 errors.append(sym)
                 items.append({**base, "err": "Sin datos en Yahoo ni en Stooq. Revisa el ticker."})
                 continue
-        t, o, h, l, c = to_series(df)
-        last = df.index[-1].date()
         closed, local_today = market_closed(sym, now)
+        last = df.index[-1].date()
+        if closed and local_today.weekday() < 5 and last < local_today and src == "yahoo":
+            # Yahoo no trae aún la vela de hoy: probar con Stooq
+            try:
+                df2 = from_stooq(sym)
+                if df2.index[-1].date() >= local_today:
+                    df, src, last = df2, "stooq", df2.index[-1].date()
+            except Exception:
+                pass
+        t, o, h, l, c = to_series(df)
         prov = last == local_today and not closed
-        items.append({**base, "src": src, "prov": prov, "t": t, "o": o, "h": h, "l": l, "c": c})
-        print(f"{sym}: {len(c)} velas ({src})")
+        grp = CLOSES.get(sym, DEFAULT_CLOSE)[0]
+        items.append({**base, "src": src, "prov": prov, "grp": grp, "t": t, "o": o, "h": h, "l": l, "c": c})
+        print(f"{sym}: {len(c)} velas, última {last}{' (en curso)' if prov else ''} ({src})")
         time.sleep(0.3)
 
     ok = [it for it in items if "c" in it]
-    last_bar = max((it["t"][-1] for it in ok if not it["prov"]), default=None)
-    last_key = fdate(last_bar) if last_bar else None
+    last_by_grp = {}
+    for it in ok:
+        if not it["prov"]:
+            last_by_grp[it["grp"]] = max(last_by_grp.get(it["grp"], 0), it["t"][-1])
+    main_bar = last_by_grp.get(DEFAULT_CLOSE[0]) or max(last_by_grp.values(), default=None)
+    last_key = fdate(main_bar) if main_bar else None
+    stale = [it["s"] for it in ok if not it["prov"] and it["t"][-1] < last_by_grp.get(it["grp"], 0)]
 
     blocks, n_long, n_short = [], 0, 0
     for it in ok:
         a = analyze(it["c"])
         if a["pos"] == 1: n_long += 1
         if a["pos"] == -1: n_short += 1
-        if it["prov"] or it["t"][-1] != last_bar:
+        if it["prov"] or it["t"][-1] != last_by_grp.get(it["grp"]):
             continue
         if a["sig"][-1]:
             blocks.append(signal_block(it, a))
@@ -249,6 +265,8 @@ def main():
         foot = f"\n\nPosiciones abiertas: {n_long} en largo, {n_short} en corto"
         if errors:
             foot += f"\n⚠️ Sin datos: {', '.join(errors)}"
+        if stale:
+            foot += f"\n⚠️ Sin la vela de hoy: {', '.join(stale)}"
         msg = None
         if blocks:
             msg = f"📊 <b>Scanner SMA</b> · {len(blocks)} señal{'es' if len(blocks) != 1 else ''} del {last_key}\n\n" + "\n\n".join(blocks) + foot + link
@@ -264,7 +282,7 @@ def main():
 
     with open("data.json", "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
-    print(f"Listo: {len(ok)} con datos, {len(errors)} con error, {len(blocks)} señales")
+    print(f"Listo: {len(ok)} con datos, {len(errors)} con error, {len(stale)} sin la vela de hoy, {len(blocks)} señales. Última vela: {last_key}")
 
 
 if __name__ == "__main__":
