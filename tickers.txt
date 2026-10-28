@@ -1,0 +1,15 @@
+# Lista de tickers del Scanner SMA (formato Yahoo Finance)
+# Cada [sección] es un sector. Separa los tickers con comas.
+# Las líneas que empiezan por # se ignoran.
+
+[Índices y ETF]
+^NDX, ^GSPC, ^DJI, ^IBEX, XLK, XLE, XLV
+
+[Energía]
+XOM, CVX, COP, EOG, SLB, PSX, MPC, VLO, OXY, WMB, KMI, OKE, FANG, BKR, HAL, DVN, CTRA, TRGP, EQT, APA, TPL, EXE
+
+[Tecnología]
+AAPL, MSFT, NVDA, AVGO, ORCL, PLTR, AMD, CRM, CSCO, IBM, ADBE, ACN, INTU, QCOM, TXN, NOW, AMAT, MU, LRCX, PANW, KLAC, ADI, APP, CRWD, ANET, SNPS, CDNS, INTC, MRVL, FTNT, NXPI, MCHP, ADSK, WDAY, DELL, ROP
+
+[Salud]
+LLY, JNJ, ABBV, UNH, MRK, ABT, TMO, ISRG, AMGN, BSX, DHR, PFE, GILD, SYK, VRTX, MDT, BMY, CVS, ELV, CI, MCK, HCA, REGN, ZTS, BDX, COR, EW, IDXX, A, GEHC, RMD, IQV, DXCM, HUM, CNC, MRNA, BIIB, ALGN, STE, WST

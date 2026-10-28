@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Técnica 1 · Escáner SMA 6/70/200</title>
+<meta name="apple-mobile-web-app-title" content="Scanner SMA">
+<title>Scanner SMA</title>
 <style>
 :root{--bg:#060d1a;--panel:#0b1628;--line:#18273f;--text:#dce6f3;--muted:#7d8ea8;--long:#3fd492;--short:#ff6b7a;--warn:#f2b84b;--s6:#ffffff;--s70:#ff4d4d;--s200:#3d8bff;color-scheme:dark}
 *{box-sizing:border-box}
@@ -68,16 +69,13 @@ textarea{width:100%;min-height:96px;background:var(--bg);border:1px solid var(--
 <div class="wrap">
 <header>
   <div>
-    <h1>Técnica 1</h1>
+    <h1>Scanner SMA</h1>
     <div class="trio" aria-hidden="true"><span style="background:var(--s6)"></span><span style="background:var(--s70)"></span><span style="background:var(--s200)"></span></div>
     <div class="sub">Cruce de SMA 6 sobre SMA 70 con filtro de tendencia SMA 200, velas diarias</div>
   </div>
   <div style="text-align:right">
-    <div class="row-btns" style="justify-content:flex-end;margin:0">
-      <button class="btn ghost" id="retry" style="display:none">Reintentar errores</button>
-      <button class="btn" id="refresh">Actualizar datos</button>
-    </div>
-    <div class="status" id="status">Sin datos todavía. Pulsa Actualizar datos.</div>
+    <button class="btn" id="reload">Recargar datos</button>
+    <div class="status" id="status">Cargando datos…</div>
   </div>
 </header>
 <div class="bar"><i id="prog"></i></div>
@@ -99,229 +97,65 @@ textarea{width:100%;min-height:96px;background:var(--bg);border:1px solid var(--
     <tbody id="tb"></tbody>
   </table>
 </div>
-<details id="cfg">
-  <summary>Ajustes</summary>
-  <div class="grid">
-    <div><label for="lb200">Pendiente SMA 200: sesiones atrás</label><input type="number" id="lb200" min="1" max="100"></div>
-    <div><label for="lb70">Pendiente SMA 70: sesiones atrás</label><input type="number" id="lb70" min="1" max="100"></div>
+<details>
+  <summary>Cómo funciona</summary>
+  <div class="note" style="font-size:13px;line-height:1.6">
+    GitHub descarga los datos cada día laborable a las 21:30 UTC, tras el cierre de Wall Street, y te envía las señales por Telegram.<br>
+    Para actualizar en cualquier momento: en GitHub, pestaña Actions, Scanner SMA, Run workflow.<br>
+    Para cambiar los tickers: edita <b>tickers.txt</b> en el repositorio. Para cambiar las pendientes: edita LB200 y LB70 al principio de <b>scanner.py</b>.<br>
+    <span id="params"></span>
   </div>
-  <div class="grid" id="lists"></div>
-  <h3>Telegram</h3>
-  <div class="grid">
-    <div><label for="tgToken">Token del bot</label><input type="password" id="tgToken" placeholder="123456:ABC…" autocomplete="off"></div>
-    <div><label for="tgChat">Chat ID</label><input type="text" id="tgChat" placeholder="123456789" autocomplete="off"></div>
-  </div>
-  <label class="chk"><input type="checkbox" id="tgAuto"> Enviar las señales confirmadas automáticamente al actualizar</label>
-  <div class="row-btns">
-    <button class="btn" id="saveCfg">Guardar ajustes</button>
-    <button class="btn ghost" id="tgTest">Probar Telegram</button>
-    <button class="btn ghost" id="tgSend">Enviar señales ahora</button>
-    <button class="btn ghost" id="resetCfg">Restaurar listas por defecto</button>
-    <button class="btn ghost" id="clearCache">Borrar datos guardados</button>
-  </div>
-  <div class="note">Tickers con formato de Yahoo Finance, separados por comas (índices: ^NDX, ^GSPC, ^DJI, ^IBEX). Si añades tickers, pulsa Actualizar datos para descargarlos. El token de Telegram solo se guarda en este dispositivo.</div>
 </details>
 </div>
 <script>
-const DEF = {
-  lb200: 20, lb70: 10,
-  lists: {
-    "Índices y ETF": "^NDX,^GSPC,^DJI,^IBEX,XLK,XLE,XLV",
-    "Energía": "XOM,CVX,COP,EOG,SLB,PSX,MPC,VLO,OXY,WMB,KMI,OKE,FANG,BKR,HAL,DVN,CTRA,TRGP,EQT,APA,TPL,EXE",
-    "Tecnología": "AAPL,MSFT,NVDA,AVGO,ORCL,PLTR,AMD,CRM,CSCO,IBM,ADBE,ACN,INTU,QCOM,TXN,NOW,AMAT,MU,LRCX,PANW,KLAC,ADI,APP,CRWD,ANET,SNPS,CDNS,INTC,MRVL,FTNT,NXPI,MCHP,ADSK,WDAY,DELL,ROP",
-    "Salud": "LLY,JNJ,ABBV,UNH,MRK,ABT,TMO,ISRG,AMGN,BSX,DHR,PFE,GILD,SYK,VRTX,MDT,BMY,CVS,ELV,CI,MCK,HCA,REGN,ZTS,BDX,COR,EW,IDXX,A,GEHC,RMD,IQV,DXCM,HUM,CNC,MRNA,BIIB,ALGN,STE,WST"
-  },
-  tg: {token:"", chat:"", auto:false}
-};
-const NAMES = {"^NDX":"Nasdaq 100","^GSPC":"S&P 500","^DJI":"Dow Jones","^IBEX":"IBEX 35"};
-const STOOQ_IDX = {"^NDX":"^ndx","^GSPC":"^spx","^DJI":"^dji"};
-const PROXIES = [
-  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
-  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
-  u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u)
-];
 const $ = id => document.getElementById(id);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 function load(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }
-function save(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } }
 function esc(s){ return String(s).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch])); }
-
-let cfg = load("t1cfg") || JSON.parse(JSON.stringify(DEF));
-if (!cfg.tg) cfg.tg = {token:"", chat:"", auto:false};
-let cache = load("t1cache") || {at:0, d:{}};
-let ui = {estado:"all", sector:"all", text:"", sel:null};
-let results = [];
-let active = [0, 1, 2];
-const PNAMES = ["corsproxy.io", "allorigins", "codetabs"];
-
-function universe(){
-  const out = [], seen = new Set();
-  for (const [sec, txt] of Object.entries(cfg.lists)) {
-    for (let s of String(txt).split(/[\s,;]+/)) {
-      s = s.trim().toUpperCase();
-      if (!s || seen.has(s)) continue;
-      seen.add(s); out.push({sym:s, sec});
-    }
-  }
-  return out;
-}
-const nameOf = s => NAMES[s] || s;
 const fmtD = ts => new Date(ts*1000).toLocaleDateString("es-ES",{day:"2-digit",month:"2-digit",year:"2-digit"});
 const fmtP = v => v == null ? "—" : (v >= 1000 ? v.toLocaleString("es-ES",{maximumFractionDigits:0}) : v.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2}));
 const fmtPct = v => v == null ? "—" : (v >= 0 ? "+" : "") + (v*100).toFixed(2).replace(".", ",") + "%";
 const cls = v => v == null ? "mut" : v >= 0 ? "pos" : "neg";
-function niceErr(m){
-  m = String(m || "");
-  if (/401/.test(m)) return "Yahoo rechazó la petición (401). Pulsa Reintentar errores.";
-  if (/429/.test(m)) return "Demasiadas peticiones (429). Espera un poco y reintenta.";
-  if (/abort|tiempo/i.test(m)) return "Tiempo de espera agotado";
-  return m;
-}
 
-async function fetchT(url, ms, asText){
-  const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), ms);
+let DATA = null;
+let cfg = {lb200:20, lb70:10};
+let ui = {estado:"all", sector:"all", text:"", sel:null};
+let results = [];
+const cache = {at:0};
+
+async function loadData(){
+  $("reload").disabled = true;
+  $("status").textContent = "Cargando datos…";
+  $("prog").style.width = "30%";
+  let offline = false;
   try {
-    const r = await fetch(url, {signal:ac.signal});
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return asText ? await r.text() : await r.json();
-  } finally { clearTimeout(t); }
-}
-function r4(v){ return v == null ? null : +(+v).toFixed(4); }
-async function getYahoo(sym){
-  let last = new Error("Sin respuesta");
-  for (const i of active) {
-    for (const host of ["query1", "query2"]) {
-      const y = "https://" + host + ".finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(sym) + "?range=2y&interval=1d";
-      try {
-        const j = await fetchT(PROXIES[i](y), 9000);
-        const r = j && j.chart && j.chart.result && j.chart.result[0];
-        if (!r) throw new Error((j && j.chart && j.chart.error && j.chart.error.description) || "Ticker sin datos");
-        const ts = r.timestamp || [], q = (r.indicators && r.indicators.quote && r.indicators.quote[0]) || {};
-        const t = [], o = [], h = [], l = [], c = [];
-        for (let n = 0; n < ts.length; n++) {
-          if (q.close == null || q.close[n] == null) continue;
-          const cc = r4(q.close[n]);
-          t.push(ts[n]); c.push(cc);
-          o.push(r4(q.open && q.open[n] != null ? q.open[n] : cc));
-          h.push(r4(q.high && q.high[n] != null ? q.high[n] : cc));
-          l.push(r4(q.low && q.low[n] != null ? q.low[n] : cc));
-        }
-        const p = r.meta && r.meta.currentTradingPeriod && r.meta.currentTradingPeriod.regular;
-        const now = Date.now()/1000;
-        return {t, o, h, l, c, prov: !!(p && now >= p.start && now < p.end)};
-      } catch(e) {
-        last = e;
-        if (/no data|delisted|not found|sin datos/i.test(e.message)) throw e;
-      }
+    const r = await fetch("data.json?v=" + Date.now(), {cache:"no-store"});
+    if (!r.ok) throw new Error(r.status === 404 ? "nodata" : "HTTP " + r.status);
+    DATA = await r.json();
+    try { localStorage.setItem("smaData", JSON.stringify(DATA)); } catch(e){}
+  } catch(e) {
+    const saved = load("smaData");
+    if (saved) { DATA = saved; offline = true; }
+    else {
+      $("reload").disabled = false; $("prog").style.width = "0";
+      $("status").textContent = e.message === "nodata"
+        ? "Todavía no hay datos. En GitHub, ve a Actions, Scanner SMA y pulsa Run workflow."
+        : "No se pudieron cargar los datos (" + e.message + "). Comprueba la conexión.";
+      return;
     }
   }
-  throw last;
-}
-async function getStooq(sym){
-  let s = null;
-  if (sym.startsWith("^")) s = STOOQ_IDX[sym] || null;
-  else if (/^[A-Z.\-]+$/.test(sym)) s = sym.toLowerCase().replace(".", "-") + ".us";
-  if (!s) throw new Error("Sin fuente alternativa");
-  const url = "https://stooq.com/q/d/l/?s=" + encodeURIComponent(s) + "&i=d";
-  let last = new Error("Sin respuesta");
-  for (const i of active) {
-    try {
-      const txt = await fetchT(PROXIES[i](url), 9000, true);
-      if (!/^Date,Open,High,Low,Close/i.test(txt.trim())) throw new Error("Stooq sin datos");
-      const rows = txt.trim().split(/\r?\n/).slice(1).slice(-520);
-      const t = [], o = [], h = [], l = [], c = [];
-      for (const row of rows) {
-        const f = row.split(",");
-        const d = f[0].split("-");
-        const cc = parseFloat(f[4]);
-        if (d.length !== 3 || !isFinite(cc)) continue;
-        t.push(Date.UTC(+d[0], +d[1]-1, +d[2], 16)/1000);
-        o.push(r4(parseFloat(f[1]) || cc)); h.push(r4(parseFloat(f[2]) || cc)); l.push(r4(parseFloat(f[3]) || cc)); c.push(r4(cc));
-      }
-      if (c.length < 2) throw new Error("Stooq sin datos");
-      return {t, o, h, l, c, prov:false, src:"stooq"};
-    } catch(e) { last = e; }
-  }
-  throw last;
-}
-async function checkProxies(){
-  const url = "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?range=5d&interval=1d";
-  const res = await Promise.all(PROXIES.map(async (f, i) => {
-    const t0 = performance.now();
-    try {
-      const j = await fetchT(f(url), 9000);
-      if (j && j.chart && j.chart.result) return {i, ok:true, ms: performance.now() - t0};
-      return {i, ok:false, e:"respuesta no válida"};
-    } catch(e) { return {i, ok:false, e: e.name === "AbortError" ? "sin respuesta" : String(e.message || e)}; }
-  }));
-  return {res, ok: res.filter(r => r.ok).sort((a, b) => a.ms - b.ms)};
-}
-async function getChart(sym){
-  try { return await getYahoo(sym); }
-  catch(e) {
-    try { return await getStooq(sym); }
-    catch(e2) { throw e; }
-  }
-}
-
-async function refresh(onlyErrors){
-  const all = universe();
-  const U = onlyErrors ? all.filter(u => { const x = cache.d[u.sym]; return !x || x.err || x.stale; }) : all;
-  if (!U.length) return;
-  $("refresh").disabled = true; $("retry").disabled = true;
-  $("status").textContent = "Comprobando la conexión con los servidores de datos…";
-  $("prog").style.width = "3%";
-  const chk = await checkProxies();
-  if (!chk.ok.length) {
-    $("refresh").disabled = false; $("retry").disabled = false; $("prog").style.width = "0";
-    $("status").textContent = "No responde ningún servidor de datos. " + chk.res.map(r => PNAMES[r.i] + ": " + r.e).join(", ") + ". Vuelve a intentarlo en unos minutos.";
-    return;
-  }
-  active = chk.ok.map(r => r.i);
-  let done = 0, errs = 0;
-  $("status").textContent = "Descargando 0 de " + U.length + " (vía " + active.map(i => PNAMES[i]).join(", ") + ")…";
-  const d = Object.assign({}, cache.d), q = U.slice();
-  async function worker(){
-    while (q.length) {
-      const u = q.shift();
-      try { d[u.sym] = await getChart(u.sym); }
-      catch(e) {
-        const msg = e.name === "AbortError" ? "Tiempo de espera agotado" : String(e.message || e);
-        if (d[u.sym] && d[u.sym].c) { d[u.sym] = Object.assign({}, d[u.sym], {stale:true, lastErr:msg}); }
-        else d[u.sym] = {err:msg};
-        errs++;
-      }
-      done++;
-      $("prog").style.width = (done/U.length*100) + "%";
-      $("status").textContent = "Descargando " + done + " de " + U.length + (errs ? ", " + errs + " con error" : "") + "…";
-      await sleep(350);
-    }
-  }
-  await Promise.all(Array.from({length:3}, worker));
-  $("refresh").disabled = false; $("retry").disabled = false;
-  if (errs === U.length && !onlyErrors && !cache.at) {
-    $("status").textContent = "No se pudo descargar ningún ticker. Comprueba la conexión o vuelve a intentarlo en unos minutos.";
-    return;
-  }
-  cache = {at: Date.now(), d};
-  const ok = save("t1cache", cache);
-  compute();
-  setStatus(ok);
-  setTimeout(() => { $("prog").style.width = "0"; }, 800);
-  if (cfg.tg.auto && cfg.tg.token && cfg.tg.chat) autoSend();
-}
-function countErrs(){ return universe().filter(u => { const x = cache.d[u.sym]; return x && (x.err || x.stale); }).length; }
-function setStatus(saved){
-  const n = countErrs();
-  $("retry").style.display = n ? "" : "none";
-  $("retry").textContent = "Reintentar errores (" + n + ")";
-  if (!cache.at) return;
+  $("prog").style.width = "100%";
+  setTimeout(() => { $("prog").style.width = "0"; }, 600);
+  $("reload").disabled = false;
+  if (DATA.params) cfg = {lb200: DATA.params.lb200 || 20, lb70: DATA.params.lb70 || 10};
+  cache.at = Date.parse(DATA.updated) || Date.now();
   const when = new Date(cache.at).toLocaleString("es-ES",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
-  let s = "Datos del " + when;
-  if (n) s += ". " + n + " tickers sin actualizar";
-  if (saved === false) s += ". No se pudieron guardar en el dispositivo";
-  $("status").textContent = s;
+  const nErr = DATA.tickers.filter(x => x.err).length;
+  $("status").textContent = "Actualizado el " + when + (DATA.lastBar ? ". Última vela: " + DATA.lastBar : "") + (nErr ? ". " + nErr + " sin datos" : "") + (offline ? ". Sin conexión: mostrando la última copia guardada" : "");
+  $("params").textContent = "Pendientes actuales: SMA 200 frente a hace " + cfg.lb200 + " sesiones, SMA 70 frente a hace " + cfg.lb70 + ".";
+  const secs = [...new Set(DATA.tickers.map(x => x.sec))];
+  $("fSector").innerHTML = '<option value="all">Todos los sectores</option>' + secs.map(k => '<option value="' + esc(k) + '">' + esc(k) + '</option>').join("");
+  $("fSector").value = secs.includes(ui.sector) ? ui.sector : "all";
+  compute();
 }
 
 function sma(a, p){
@@ -369,13 +203,11 @@ function analyze(t, c){
   };
 }
 function compute(){
-  results = universe().map(u => {
-    const x = cache.d[u.sym];
-    if (!x) return Object.assign({}, u, {err:"Sin descargar"});
-    if (x.err) return Object.assign({}, u, {err:niceErr(x.err)});
-    if (!x.c || x.c.length < 2) return Object.assign({}, u, {err:"Ticker sin datos"});
-    const a = analyze(x.t, x.c);
-    return Object.assign({}, u, a, {prov:x.prov, stale:!!x.stale, o:x.o, h:x.h, l:x.l});
+  results = (DATA ? DATA.tickers : []).map(x => {
+    const u = {sym:x.s, sec:x.sec, name:x.name || x.s};
+    if (x.err) return Object.assign(u, {err:x.err});
+    if (!x.c || x.c.length < 2) return Object.assign(u, {err:"Sin datos"});
+    return Object.assign(u, analyze(x.t, x.c), {prov:!!x.prov, o:x.o, h:x.h, l:x.l});
   });
   render();
 }
@@ -388,7 +220,7 @@ function rank(r){
   return 3;
 }
 function rowHTML(r){
-  const name = '<span class="tk">' + esc(nameOf(r.sym)) + '</span><span class="sec">' + esc(r.sym !== nameOf(r.sym) ? r.sym + " · " + r.sec : r.sec) + '</span>';
+  const name = '<span class="tk">' + esc(r.name) + '</span><span class="sec">' + esc(r.sym !== r.name ? r.sym + " · " + r.sec : r.sec) + '</span>';
   const sel = ui.sel === r.sym ? " sel" : "";
   if (r.err) return '<tr class="row' + sel + '" data-s="' + esc(r.sym) + '"><td>' + name + '</td><td colspan="7" class="neg" style="white-space:normal">' + esc(r.err) + '</td></tr>';
   const est = r.pos === 1 ? '<span class="pill L">LARGO</span>' : r.pos === -1 ? '<span class="pill S">CORTO</span>' : '<span class="mut">Fuera</span>';
@@ -397,7 +229,7 @@ function rowHTML(r){
   else if (r.recAgo != null) sg = '<span class="mut">' + esc(r.recSig) + ', hace ' + r.recAgo + (r.recAgo === 1 ? " sesión" : " sesiones") + '</span>';
   const ent = r.entry ? fmtD(r.entry.ts) + '  <span class="mut">' + fmtP(r.entry.p) + '</span>' : '<span class="mut">—</span>';
   const fil = !r.enough ? '<span class="mut">Historial corto</span>' : r.fL ? '<span class="pos">Alcista</span>' : r.fS ? '<span class="neg">Bajista</span>' : '<span class="mut">Neutro</span>';
-  const tag = r.stale ? '<span class="prov">sin actualizar</span>' : r.prov ? '<span class="prov">en curso</span>' : "";
+  const tag = r.prov ? '<span class="prov">en curso</span>' : "";
   return '<tr class="row' + sel + '" data-s="' + esc(r.sym) + '"><td>' + name + '</td><td>' + fmtP(r.close) + tag +
     '</td><td class="' + cls(r.dayChg) + '">' + fmtPct(r.dayChg) + '</td><td>' + est + '</td><td>' + sg + '</td><td>' + ent +
     '</td><td class="' + cls(r.ret) + '">' + fmtPct(r.ret) + '</td><td>' + fil + '</td></tr>';
@@ -411,7 +243,7 @@ function detailHTML(r){
     return '<tr><td>' + (x.dir === 1 ? '<span class="pill L">Largo</span>' : '<span class="pill S">Corto</span>') + '</td><td>' + fmtD(r.t[x.in]) + ' <span class="mut">' + fmtP(r.c[x.in]) + '</span></td><td>' +
       (x.out != null ? fmtD(r.t[x.out]) + ' <span class="mut">' + fmtP(r.c[x.out]) + '</span>' : '<span class="mut">Abierta</span>') + '</td><td class="' + cls(ret) + '">' + fmtPct(ret) + '</td></tr>';
   }).join("");
-  return '<tr class="drow"><td colspan="8"><div class="detail"><h2>' + esc(nameOf(r.sym)) + '</h2><div class="mut" style="font-size:13px">' + esc(r.sym) + ' · ' + esc(r.sec) + ' · último cierre ' + fmtD(r.date) + (r.prov ? ' (vela en curso)' : '') + '</div>' +
+  return '<tr class="drow"><td colspan="8"><div class="detail"><h2>' + esc(r.name) + '</h2><div class="mut" style="font-size:13px">' + esc(r.sym) + ' · ' + esc(r.sec) + ' · último cierre ' + fmtD(r.date) + (r.prov ? ' (vela en curso)' : '') + '</div>' +
     '<canvas id="cv" aria-label="Gráfico de velas con SMA 6, 70 y 200"></canvas>' +
     '<div class="legend"><span><i style="background:var(--s6)"></i>SMA 6</span><span><i style="background:var(--s70)"></i>SMA 70</span><span><i style="background:var(--s200)"></i>SMA 200</span><span><i style="background:var(--long)"></i>Entrada largo</span><span><i style="background:var(--short)"></i>Entrada corto</span><span><i style="background:var(--warn)"></i>Salida</span></div>' +
     '<div class="mut" style="font-size:13px;margin-bottom:8px">Últimos 2 años: ' + closed.length + ' operaciones cerradas, ' + (closed.length ? Math.round(wins/closed.length*100) : 0) + '% ganadoras, suma de resultados ' + fmtPct(closed.length ? sum : null) + '</div>' +
@@ -431,7 +263,7 @@ function render(){
   const txt = ui.text.trim().toUpperCase();
   let rows = results.filter(r => {
     if (ui.sector !== "all" && r.sec !== ui.sector) return false;
-    if (txt && !r.sym.includes(txt) && !nameOf(r.sym).toUpperCase().includes(txt)) return false;
+    if (txt && !r.sym.includes(txt) && !r.name.toUpperCase().includes(txt)) return false;
     if (ui.estado === "sig") return !r.err && !!r.sigToday;
     if (ui.estado === "rec") return !r.err && r.recAgo != null;
     if (ui.estado === "L") return !r.err && r.pos === 1;
@@ -508,79 +340,13 @@ function drawChart(r){
   }
 }
 
-async function tgSend(text){
-  const tok = cfg.tg.token.trim(), chat = cfg.tg.chat.trim();
-  if (!tok || !chat) throw new Error("Falta el token o el chat ID en Ajustes.");
-  if (!/^\d+:[\w-]{30,}$/.test(tok)) throw new Error("El token no tiene el formato correcto (número, dos puntos y clave).");
-  const url = "https://api.telegram.org/bot" + tok + "/sendMessage";
-  const body = new URLSearchParams({chat_id: chat, text});
-  let r;
-  try { r = await fetch(url, {method:"POST", body}); }
-  catch(e) {
-    await fetch(url, {method:"POST", body, mode:"no-cors"});
-    return "sin confirmación";
-  }
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.ok) throw new Error(j.description || ("HTTP " + r.status));
-  return "ok";
-}
-function signalText(onlyConfirmed){
-  const list = results.filter(r => !r.err && r.sigToday && (!onlyConfirmed || !r.prov));
-  if (!list.length) return null;
-  const ico = s => /Entra LARGO/.test(s) ? "🟢" : /Entra CORTO/.test(s) ? "🔴" : "🟡";
-  const d = fmtD(list[0].date);
-  return "📊 Técnica 1, señales del " + d + "\n\n" + list.map(r => ico(r.sigToday) + " " + nameOf(r.sym) + ": " + r.sigToday + " (" + fmtP(r.close) + ")" + (r.prov ? " ⏳ vela en curso" : "")).join("\n");
-}
-async function autoSend(){
-  const txt = signalText(true);
-  if (!txt) return;
-  const sent = load("t1sent");
-  if (sent === txt) return;
-  try { await tgSend(txt); save("t1sent", txt); $("status").textContent += ". Señales enviadas a Telegram"; }
-  catch(e) { $("status").textContent += ". Telegram: " + e.message; }
-}
-
-function readCfgForm(){
-  const a = parseInt($("lb200").value, 10), b = parseInt($("lb70").value, 10);
-  cfg.lb200 = a >= 1 && a <= 100 ? a : DEF.lb200; cfg.lb70 = b >= 1 && b <= 100 ? b : DEF.lb70;
-  document.querySelectorAll("#lists textarea").forEach(t => cfg.lists[t.dataset.k] = t.value);
-  cfg.tg = {token: $("tgToken").value.trim(), chat: $("tgChat").value.trim(), auto: $("tgAuto").checked};
-}
-function initCfg(){
-  $("lb200").value = cfg.lb200; $("lb70").value = cfg.lb70;
-  $("tgToken").value = cfg.tg.token; $("tgChat").value = cfg.tg.chat; $("tgAuto").checked = !!cfg.tg.auto;
-  $("lists").innerHTML = Object.entries(cfg.lists).map(([k,v], i) => '<div><label for="ls' + i + '">' + esc(k) + '</label><textarea id="ls' + i + '" data-k="' + esc(k) + '">' + esc(v) + '</textarea></div>').join("");
-  $("fSector").innerHTML = '<option value="all">Todos los sectores</option>' + Object.keys(cfg.lists).map(k => '<option value="' + esc(k) + '">' + esc(k) + '</option>').join("");
-  $("fSector").value = Object.keys(cfg.lists).includes(ui.sector) ? ui.sector : "all";
-}
-$("saveCfg").onclick = () => {
-  readCfgForm(); save("t1cfg", cfg); initCfg(); compute(); setStatus();
-  const missing = universe().filter(u => !cache.d[u.sym]).length;
-  $("status").textContent = "Ajustes guardados" + (missing ? ". Hay " + missing + " tickers nuevos: pulsa Actualizar datos." : ".");
-};
-$("tgTest").onclick = async () => {
-  readCfgForm(); save("t1cfg", cfg);
-  try { const k = await tgSend("✅ Técnica 1 conectada. Aquí recibirás las señales."); $("status").textContent = k === "ok" ? "Mensaje de prueba enviado a Telegram." : "Mensaje enviado, pero el navegador no deja confirmar la respuesta. Mira si te ha llegado a Telegram."; }
-  catch(e) { $("status").textContent = "Telegram: " + e.message; }
-};
-$("tgSend").onclick = async () => {
-  readCfgForm(); save("t1cfg", cfg);
-  const txt = signalText(false) || "📊 Técnica 1: sin señales hoy.";
-  try { await tgSend(txt); $("status").textContent = "Señales enviadas a Telegram."; }
-  catch(e) { $("status").textContent = "Telegram: " + e.message; }
-};
-$("resetCfg").onclick = () => { const tg = cfg.tg; cfg = JSON.parse(JSON.stringify(DEF)); cfg.tg = tg; save("t1cfg", cfg); initCfg(); compute(); setStatus(); $("status").textContent = "Listas restauradas."; };
-$("clearCache").onclick = () => { cache = {at:0, d:{}}; try { localStorage.removeItem("t1cache"); } catch(e){} ui.sel = null; compute(); setStatus(); $("status").textContent = "Datos borrados. Pulsa Actualizar datos."; };
-$("refresh").onclick = () => refresh(false);
-$("retry").onclick = () => refresh(true);
+$("reload").onclick = loadData;
 document.querySelectorAll("#segEstado button").forEach(b => b.onclick = () => setEstado(b.dataset.v));
 $("fSector").onchange = e => { ui.sector = e.target.value; render(); };
 $("fText").oninput = e => { ui.text = e.target.value; render(); };
 let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (ui.sel) { const r = results.find(x => x.sym === ui.sel); if (r && !r.err) drawChart(r); } }, 150); });
-
-initCfg();
-compute();
-setStatus();
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && cache.at && Date.now() - cache.at > 6*3600*1000) loadData(); });
+loadData();
 </script>
 </body>
 </html>
