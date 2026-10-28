@@ -23,18 +23,21 @@ concurrency: scanner-sma
 jobs:
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Instalar dependencias
-        run: pip install yfinance pandas
+        run: pip install yfinance "pandas<3"
       - name: Ejecutar scanner
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           FORCE_SEND: ${{ inputs.forzar_envio }}
+          PYTHONUNBUFFERED: "1"
+          PYTHONWARNINGS: "ignore"
         run: python scanner.py
       - name: Guardar datos
         run: |
