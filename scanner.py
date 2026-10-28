@@ -59,10 +59,10 @@ def from_yahoo_chart(sym):
     for host in ("query1", "query2"):
         url = (f"https://{host}.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(sym)}"
                "?range=2y&interval=1d&includePrePost=false")
-        for attempt in range(2):
+        for attempt in range(1):
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
-                j = json.loads(urllib.request.urlopen(req, timeout=15).read().decode())
+                j = json.loads(urllib.request.urlopen(req, timeout=8).read().decode())
                 chart = j.get("chart") or {}
                 res = chart.get("result")
                 if not res:
@@ -87,10 +87,8 @@ def from_yahoo_chart(sym):
                 last = e
                 if e.code == 404:
                     raise ValueError("ticker no encontrado en Yahoo")
-                time.sleep(2 * (attempt + 1))
             except Exception as e:
                 last = e
-                time.sleep(1)
     raise last
 
 
@@ -247,21 +245,28 @@ def main():
 
     items, errors = [], []
     stooq_fails = 0
+    yahoo_fails = 0
     for sym, sec in read_tickers():
         base = {"s": sym, "sec": sec, "name": NAMES.get(sym, sym)}
         df, src, errs = None, None, []
         for name, fn in (("yahoo", from_yahoo_chart), ("yfinance", from_yfinance), ("stooq", from_stooq)):
-            if name == "stooq" and stooq_fails >= 3:
+            if (name == "stooq" and stooq_fails >= 3) or (name == "yahoo" and yahoo_fails >= 3):
                 continue
             try:
                 df, src = fn(sym), name
                 if name == "stooq":
                     stooq_fails = 0
+                if name == "yahoo":
+                    yahoo_fails = 0
                 break
             except Exception as e:
                 errs.append(f"{name}: {e}")
                 if name == "stooq":
                     stooq_fails += 1
+                if name == "yahoo":
+                    yahoo_fails += 1
+                    if yahoo_fails == 3:
+                        print(f"Yahoo directo no responde ({e}); se usa yfinance para el resto")
         if df is None:
             print(f"{sym}: error ({'; '.join(errs)})")
             errors.append(sym)
